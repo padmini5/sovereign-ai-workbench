@@ -1,0 +1,21 @@
+[Unit]
+Description=SovereignAI Workbench backend (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=sov
+Group=sov
+WorkingDirectory=/opt/sovereign-ai-workbench
+EnvironmentFile=/etc/sovereign-ai-workbench.env
+# Host/port come from SOV_HOST / SOV_PORT in the EnvironmentFile.
+ExecStart=/bin/bash -c 'exec /opt/sovereign-ai-workbench/venv/bin/uvicorn backend.app.main:app --host ${SOV_HOST:-0.0.0.0} --port ${SOV_PORT:-8000} --proxy-headers --forwarded-allow-ips 127.0.0.1'
+Restart=always
+RestartSec=5
+# Hardening (uncomment after verifying paths):
+# ProtectSystem=strict
+# ReadWritePaths=/var/lib/sov-workbench /opt/sovereign-ai-workbench/backend/outputs
+# NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

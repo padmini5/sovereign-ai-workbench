@@ -1,0 +1,33 @@
+roles:
+  field_engineer:
+    max_clearance_tier: internal
+    cross_unit: false
+    allowed_actions: [upload, query_kb, view_own_tasks]
+  process_engineer:
+    max_clearance_tier: confidential
+    cross_unit: false
+    allowed_actions: [upload, query_kb, draft, submit_review, view_unit_tasks]
+  safety_inspector:
+    max_clearance_tier: confidential
+    cross_unit: false
+    allowed_actions: [upload, query_kb, draft, flag_anomaly, submit_review]
+  approving_manager:
+    max_clearance_tier: confidential
+    cross_unit: true
+    allowed_actions: [upload, query_kb, draft, review, sign, reject, view_all_tasks]
+  security_admin:
+    max_clearance_tier: public
+    cross_unit: true
+    content_blind: true
+    allowed_actions: [admin, key_rotation, monitor_view, user_manage]
+  auditor:
+    max_clearance_tier: confidential
+    cross_unit: true
+    read_only: true
+    allowed_actions: [audit_view, verify_signature, export_audit]
+
+tier_rank:
+  public: 0
+  internal: 1
+  confidential: 2
+  restricted: 3

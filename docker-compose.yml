@@ -1,0 +1,102 @@
+# Sovereign AI Workbench — production stack (Step 24).
+# Secrets come ONLY from a local .env file (see .env.example). Nothing
+# secret is committed here: passwords are ${...} references that fail fast
+# when unset.
+#
+#   cp .env.example .env   # then fill in real values
+#   docker compose up --build -d
+#
+# Services: db (internal only), backend (localhost-only 8000),
+# frontend (8080), ollama (optional profile `local-ai`).
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    # No ports: reachable only inside the compose network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: [.env]
+    environment:
+      SOV_ENV: production
+      SOV_HOST: 0.0.0.0
+      SOV_PORT: 8000
+      SOV_DATA_DIR: /data
+      DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+      SOV_OLLAMA_URL: ${SOV_OLLAMA_URL:-http://ollama:11434}
+      SOV_CORS_ORIGINS: ${SOV_CORS_ORIGINS:-http://localhost:8080}
+      SOV_DEMO_LOGIN: ${SOV_DEMO_LOGIN:-1}
+    volumes:
+      - sov-data:/data
+    networks: [internal]
+    ports:
+      - "127.0.0.1:8000:8000"  # localhost only; public traffic goes via frontend
+    healthcheck:
+      # NOTE: the probe calls /health, which does a single DNS+TCP probe of the
+      # (usually absent) Ollama host; OS-level name resolution is not covered
+      # by the app's 1s socket timeout and can take several seconds, so the
+      # probe timeout must allow for that. No app behavior is changed by this.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=14).status==200 else 1)\""]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [internal]
+    ports:
+      - "127.0.0.1:8080:8080"  # localhost only: public traffic enters via
+                                # the host reverse proxy on 80/443, never here directly
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/phase1.html > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Optional on-prem LLM. NOT started by default and NEVER pulled at build
+  # time. Start with:  docker compose --profile local-ai up -d
+  # Then pull models explicitly:  docker compose exec ollama ollama pull qwen2.5:7b-instruct
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [local-ai]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  pgdata:
+  sov-data:
+  ollama-models:

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+chroma_db/
+outputs/
+*.db
+*.db-journal
+kb_store.json
+uploads/
+tests/
+.pytest_cache/

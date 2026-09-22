@@ -1,0 +1,19 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+PyJWT==2.10.1
+pyyaml==6.0.2
+psutil==6.1.1
+python-docx==1.1.2
+openpyxl==3.1.5
+scikit-learn==1.5.2
+numpy==2.1.3
+python-multipart==0.0.20
+bcrypt==5.0.0
+pillow==12.3.0
+pypdf==6.19.0
+cryptography==44.0.2
+chromadb==1.5.9
+vosk==0.3.45
+pyttsx3==2.99
+# Optional (auto-used if installed — no failure if missing):
+# ollama, oqs-python
