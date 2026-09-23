@@ -108,10 +108,12 @@ def login(b: Login):
     from . import ratelimit
     ratelimit.check("login", f"legacy:{b.username[:64]}")
     u = USERS.get(b.username)
-    if not u or u["password"] != b.password:
+    # Legacy demo accounts may also use the spec demo password (alias);
+    # neither password nor alias is ever echoed back to the client.
+    if not u or not (b.password == u["password"] or b.password == u.get("alias")):
         raise HTTPException(401, "bad credentials")
     tok = create_token(u["user_id"], u["role"], u["clearance_tier"], u["unit"])
-    return {"token": tok, "user": {k: v for k, v in u.items() if k != "password"}}
+    return {"token": tok, "user": {k: v for k, v in u.items() if k not in ("password", "alias")}}
 
 @app.get("/api/me")
 def me(user: dict = Depends(get_current_user)):

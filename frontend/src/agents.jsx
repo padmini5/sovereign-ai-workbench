@@ -49,7 +49,13 @@ export function AgentsView({ tok, user }) {
 
   const load = async () => {
     try {
-      setAgents((await apiFetch('/api/v1/agents', tok)).agents);
+      const list = (await apiFetch('/api/v1/agents', tok)).agents;
+      // Show only agents this role can actually run (server flags; the
+      // backend re-checks authorization on every start_run).
+      const runnable = list.filter((a) => a.allowed && a.enabled);
+      setAgents(runnable);
+      setAgent((cur) => (runnable.some((a) => a.name === cur)
+        ? cur : (runnable[0] ? runnable[0].name : '')));
       setRuns((await apiFetch('/api/v1/agents/runs', tok)).runs);
       setDocs((await apiFetch('/api/v1/docs?status=READY', tok)).documents);
     } catch (e) { setErr(e.message); }
@@ -72,8 +78,7 @@ export function AgentsView({ tok, user }) {
         {err && <p style={s.err}>{err}</p>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <select style={s.in} value={agent} onChange={(e) => setAgent(e.target.value)}>
-            {agents.map((a) => <option key={a.name} value={a.name} disabled={!a.allowed}>
-              {a.name}{a.allowed ? '' : ' (not for your role)'}</option>)}
+            {agents.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
           </select>
           <input style={{ ...s.in, flex: 1, minWidth: 200 }} value={goal}
             placeholder="Goal, e.g. summarize the selected documents"

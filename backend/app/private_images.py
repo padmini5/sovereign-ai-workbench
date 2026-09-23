@@ -116,8 +116,11 @@ def analyze_private_image(user: dict, doc_id: str, question: str = "") -> dict:
         raise HTTPException(404, "Resource unavailable.")
     if doc.get("kind") != "image":
         raise HTTPException(422, "not an image document")
-    base = os.getenv("SOV_UPLOADS_DIR", "") or os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+    # Same resolution as docs_api/rag (SOV_DATA_DIR-aware): compose sets
+    # SOV_DATA_DIR=/data, so a code-relative fallback would look in a
+    # different directory than upload() wrote to ("stored file missing").
+    from . import config as cfg
+    base = os.getenv("SOV_UPLOADS_DIR", "") or cfg.data_path("uploads")
     data = read_image_bytes(doc, base)
     vp = get_vision_provider()
     info = vp.validate(data)

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { request } from '../api.js';
 import { getAccess, getRefresh, getLegacyToken, logout } from '../session.js';
 import { LANGS } from '../ui-strings.js';
-import { THEMES, useTheme } from '../theme.js';
 import { T } from '../i18n.js';
 import { Card, Spinner, ErrorNote, PermChips, useToast } from '../ui.jsx';
 
@@ -63,13 +62,6 @@ export default function Settings({ user, lang, setLang, onLogout }) {
   const [expiry, setExpiry] = useState(null);
   const toast = useToast();
   const canAI = (user.permissions || []).includes('AI_CHAT');
-  const [theme, setTheme] = useTheme();
-
-  const previews = {
-    dark: { bg: '#0b111b', card: '#111c2e', text: '#e8edf3', accent: '#2563eb' },
-    light: { bg: '#F6F8FB', card: '#ffffff', text: '#1F2937', accent: '#2563eb' },
-    'high-contrast': { bg: '#000000', card: '#0a0a0a', text: '#ffffff', accent: '#4da3ff' },
-  };
 
   useEffect(() => {
     setExpiry(tokenExpiry());
@@ -96,34 +88,6 @@ export default function Settings({ user, lang, setLang, onLogout }) {
       </div>
 
       <div className="grid-2">
-        <Card title={T(lang, 'appearance')}>
-          <label className="field">
-            {T(lang, 'theme')}
-            <select className="select" value={theme} onChange={(e) => setTheme(e.target.value)}>
-              {THEMES.map((t) => (
-                <option key={t.id} value={t.id}>{T(lang, 'theme_' + t.id.replace(/-/g, ''))}</option>
-              ))}
-            </select>
-          </label>
-          <div className="theme-preview" role="group" aria-label={T(lang, 'appearance')}>
-            {THEMES.map((t) => {
-              const p = previews[t.id];
-              return (
-                <button key={t.id} className="theme-swatch" aria-pressed={theme === t.id}
-                  onClick={() => setTheme(t.id)} title={T(lang, 'theme_' + t.id.replace(/-/g, ''))}>
-                  <span className="sw">
-                    <i style={{ background: p.bg }} /><i style={{ background: p.card }} />
-                    <i style={{ background: p.accent }} /><i style={{ background: p.text }} />
-                  </span>
-                  {T(lang, 'theme_' + t.id.replace(/-/g, ''))}
-                  {theme === t.id ? ' ✓' : ''}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mut">{T(lang, 'appearanceNote')}</p>
-        </Card>
-
         <Card title={T(lang, 'languagePref')}>
           <label className="field">
             {T(lang, 'languagePref')}

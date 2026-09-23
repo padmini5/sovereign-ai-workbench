@@ -29,11 +29,13 @@ TIER_RANK = ROLES_CFG.get("tier_rank", {"public": 0, "internal": 1, "confidentia
 # Demo users: username -> {password, user_id, role, unit, clearance_tier}
 USERS = {
     "field1":   {"password": "field123", "user_id": "u-field-01", "role": "field_engineer",   "unit": "MRPL-U2", "clearance_tier": "internal"},
-    "process1": {"password": "proc123",  "user_id": "u-proc-01",  "role": "process_engineer", "unit": "MRPL-U2", "clearance_tier": "confidential"},
-    "safety1":  {"password": "safe123",  "user_id": "u-safe-01",  "role": "safety_inspector", "unit": "MRPL-U2", "clearance_tier": "confidential"},
-    "manager1": {"password": "mgr123",   "user_id": "u-mgr-01",   "role": "approving_manager","unit": "MRPL-U2", "clearance_tier": "confidential"},
-    "admin1":   {"password": "adm123",   "user_id": "u-adm-01",   "role": "security_admin",   "unit": "HQ",     "clearance_tier": "public"},
-    "audit1":   {"password": "aud123",   "user_id": "u-aud-01",   "role": "auditor",          "unit": "HQ",     "clearance_tier": "confidential"},
+    # `alias` = additional accepted demo password (login cards show it);
+    # the primary `password` above stays valid (README/verify scripts pin it).
+    "process1": {"password": "proc123", "alias": "process123", "user_id": "u-proc-01",  "role": "process_engineer", "unit": "MRPL-U2", "clearance_tier": "confidential"},
+    "safety1":  {"password": "safe123", "alias": "safety123",  "user_id": "u-safe-01",  "role": "safety_inspector", "unit": "MRPL-U2", "clearance_tier": "confidential"},
+    "manager1": {"password": "mgr123",  "alias": "manager123", "user_id": "u-mgr-01",   "role": "approving_manager","unit": "MRPL-U2", "clearance_tier": "confidential"},
+    "admin1":   {"password": "adm123",  "alias": "admin123",   "user_id": "u-adm-01",   "role": "security_admin",   "unit": "HQ",     "clearance_tier": "public"},
+    "audit1":   {"password": "aud123",  "alias": "audit123",   "user_id": "u-aud-01",   "role": "auditor",          "unit": "HQ",     "clearance_tier": "confidential"},
 }
 
 def create_token(user_id: str, role: str, clearance_tier: str, unit: str) -> str:

@@ -28,13 +28,26 @@ function Score({ perf, lang }) {
   );
 }
 
-export default function Performance({ tok, user, lang, onAskWork }) {
+export default function Performance({ tok, user, lang, onAskWork, onNav }) {
   const [me, setMe] = useState(null);
   const [crit, setCrit] = useState(null);
   const [ov, setOv] = useState(null);
   const [trend, setTrend] = useState(null);
   const [err, setErr] = useState('');
+  const [genBusy, setGenBusy] = useState(false);
   const mgr = isManagerLike(user) && (user.permissions || []).includes('ANALYTICS_READ');
+  /* Generate a performance report (REPORT_CREATE; server re-checks scope:
+     team scope only succeeds for manager-like roles, own otherwise). */
+  const canGen = (user.permissions || []).includes('REPORT_CREATE');
+  const generate = async () => {
+    if (genBusy) return;
+    setGenBusy(true); setErr('');
+    try {
+      await request('/api/v1/reports/generate', { method: 'POST',
+        body: { report_type: 'performance', scope: mgr ? 'team' : 'own' } });
+      if (onNav) onNav('reports');
+    } catch (e) { setErr(e.message); } finally { setGenBusy(false); }
+  };
 
   useEffect(() => {
     request('/api/v1/work/me').then(setMe).catch((e) => setErr(e.message));
@@ -61,6 +74,11 @@ export default function Performance({ tok, user, lang, onAskWork }) {
                 onClick={() => onAskWork && onAskWork({ text: 'Summarize my work for this period: completed work, pending work, and what affects my score.' })}>
                 {T(lang, 'askAIAboutWork')}
               </button>
+              {canGen && (
+                <button className="btn btn-ghost btn-mini" disabled={genBusy}
+                  onClick={generate}>
+                  {genBusy ? <Spinner label="…" /> : T(lang, 'generateReport')}
+                </button>)}
             </div>
           </Card>
           <Card title={T(lang, 'scoreBreakdown')}>

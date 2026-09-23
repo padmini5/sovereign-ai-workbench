@@ -8,7 +8,7 @@ import { T } from './i18n.js';
 import { NAV, canSee, visibleNav } from './nav.js';
 import { ToastProvider } from './ui.jsx';
 import { LANGS } from './ui-strings.js';
-import { THEMES, initTheme, useTheme } from './theme.js';
+import { initTheme } from './theme.js';
 
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -55,7 +55,6 @@ function useRoute() {
 function Shell() {
   const [, setTick] = useState(0);
   useEffect(() => subscribe(() => setTick((t) => t + 1)), []);
-  const [theme, setTheme] = useTheme();
 
   const sess = getSession();
   const user = sess?.user;
@@ -130,7 +129,7 @@ function Shell() {
       case 'schedule': return <Schedule tok={tok} user={user} lang={lang} />;
       case 'worksheets': return <Worksheets tok={tok} user={user} lang={lang} onAskWork={onAskWork} />;
       case 'spreadsheets': return <Spreadsheets tok={tok} user={user} lang={lang} />;
-      case 'performance': return <Performance tok={tok} user={user} lang={lang} onAskWork={onAskWork} />;
+      case 'performance': return <Performance tok={tok} user={user} lang={lang} onAskWork={onAskWork} onNav={go} />;
       case 'assistant': return <Assistant tok={tok} user={user} askDoc={askDoc} askCtx={askCtx} lang={lang} />;
       case 'documents': return <DocumentsPage tok={tok} user={user} onAsk={onAsk} lang={lang} />;
       case 'images': return <ImageAnalysis tok={tok} user={user} onAsk={onAsk} lang={lang} />;
@@ -151,7 +150,7 @@ function Shell() {
       <div className="shell">
         <header className="shell-head">
           <div className="brand">
-            <div className="brand-mark">S</div>
+            <div className="brand-mark"><img src="/sihlogo.jpg" alt="Sovereign AI Workbench logo" /></div>
             <div>
               <h1>Sovereign AI Workbench</h1>
               <div className="sub">{T(lang, 'subtitle') || 'Secure Local AI for Sensitive Documents'}</div>
@@ -162,9 +161,6 @@ function Shell() {
             <span className="pill">{user.username}</span>
             <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={T(lang, 'language')}>
               {LANGS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}
-            </select>
-            <select value={theme} onChange={(e) => setTheme(e.target.value)} aria-label={T(lang, 'theme')}>
-              {THEMES.map((t) => <option key={t.id} value={t.id}>{T(lang, 'theme_' + t.id.replace(/-/g, ''))}</option>)}
             </select>
             <button className="btn btn-ghost btn-mini" style={{ marginLeft: 0 }} onClick={doLogout}>
               {T(lang, 'logout')}

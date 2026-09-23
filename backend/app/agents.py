@@ -344,31 +344,31 @@ TOOL_REGISTRY: dict[str, dict] = {
 # ---------------- agent registry ----------------
 
 AGENT_REGISTRY: dict[str, dict] = {
+    # Content agents are gated by the RBAC permission matrix (`perms`): every
+    # permission listed must hold. This is additive vs the legacy persona lists
+    # (which predated EMPLOYEE and drifted); tool-level roles/perm checks in
+    # exec_tool remain unchanged and the backend stays authoritative.
     "document_analysis": {
         "purpose": "Analyze owned documents via retrieval + excerpts + summary",
-        "roles": ["ADMIN", "MANAGER", "OPERATOR", "REVIEWER", "USER",
-                  "field_engineer", "process_engineer", "safety_inspector",
-                  "approving_manager"],
+        "perms": ["DOCUMENT_READ", "AI_CHAT"],
         "tools": ["rag_search", "analyze_document", "get_image_info", "list_my_docs",
                   "analyze_authorized_image", "summarize", "translate_text"],
         "max_steps": 8, "timeout_s": 120, "max_tool_calls": 10, "enabled": True},
     "report_generation": {
         "purpose": "Draft reports from authorized sources (confirmation gated)",
-        "roles": ["ADMIN", "MANAGER", "REVIEWER", "process_engineer",
-                  "approving_manager"],
+        "perms": ["REPORT_CREATE", "DOCUMENT_READ", "AI_CHAT"],
         "tools": ["rag_search", "analyze_document", "list_my_docs", "summarize",
                   "translate_text", "generate_report"],
         "max_steps": 8, "timeout_s": 180, "max_tool_calls": 10, "enabled": True},
     "review": {
         "purpose": "Review documents: gaps, summary, cross-checks",
-        "roles": ["ADMIN", "MANAGER", "REVIEWER", "safety_inspector",
-                  "approving_manager"],
+        "perms": ["DOCUMENT_READ", "DOCUMENT_ANALYZE", "AI_CHAT"],
         "tools": ["rag_search", "analyze_document", "get_image_info", "list_my_docs",
                   "analyze_authorized_image", "summarize", "translate_text"],
         "max_steps": 8, "timeout_s": 120, "max_tool_calls": 10, "enabled": True},
     "data_analysis": {
         "purpose": "Analyze structured (CSV/XLSX) content via extracted text",
-        "roles": ["ADMIN", "MANAGER", "OPERATOR", "process_engineer"],
+        "perms": ["DOCUMENT_READ", "AI_CHAT"],
         "tools": ["rag_search", "analyze_document", "list_my_docs", "summarize",
                   "translate_text"],
         "max_steps": 6, "timeout_s": 120, "max_tool_calls": 8, "enabled": True},
@@ -388,6 +388,18 @@ AGENT_REGISTRY: dict[str, dict] = {
                   "summarize", "translate_text"],
         "max_steps": 8, "timeout_s": 120, "max_tool_calls": 10, "enabled": True},
 }
+
+
+def agent_allowed(spec: dict, role: str) -> bool:
+    """May `role` run this agent? Agents declaring `perms` are gated by the
+    RBAC permission matrix (every permission required); agents declaring the
+    legacy `roles` allow-list keep exact membership. The permission-derived
+    gate keeps the registry in sync with rbac.py — hand-maintained persona
+    lists had drifted (e.g. EMPLOYEE could not run its own agents)."""
+    perms = spec.get("perms")
+    if perms:
+        return all(has_permission(role, p) for p in perms)
+    return role in (spec.get("roles") or [])
 
 
 def _default_plan(agent: str, goal: str, document_ids: list[str]) -> list[dict]:
@@ -578,7 +590,7 @@ def start_run(user: dict, agent: str, goal: str, document_ids: list[str] | None,
     from .sysconfig import agent_enabled
     if spec is None or not agent_enabled(agent, spec.get("enabled", True)):
         raise HTTPException(404, "unknown or disabled agent")
-    if user["role"] not in spec["roles"]:
+    if not agent_allowed(spec, user["role"]):
         audit_log.append(user["id"], user["role"], "tool_denied",
                          resource=f"agent:{agent}", decision="deny",
                          detail="role not allowed for agent")
@@ -647,7 +659,7 @@ def cancel_run(user: dict, run_id: str) -> dict:
 
 def describe_registry(role: str) -> list[dict]:
     from .sysconfig import agent_enabled
-    return [{"name": n, "purpose": s["purpose"], "allowed": role in s["roles"],
+    return [{"name": n, "purpose": s["purpose"], "allowed": agent_allowed(s, role),
              "tools": s["tools"], "limits": {"max_steps": s["max_steps"],
                                              "timeout_s": s["timeout_s"],
                                              "max_tool_calls": s["max_tool_calls"]},

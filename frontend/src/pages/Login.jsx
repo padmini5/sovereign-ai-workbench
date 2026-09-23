@@ -11,23 +11,35 @@ import { Spinner } from '../ui.jsx';
 
 const STRIP_DEMO = ((import.meta.env.VITE_DEMO_CREDS ?? '1') === '0');
 
-// Main demo experience: role cards. Passwords are filled, never displayed.
+// All 11 demo accounts shown as visible cards (5 primary + 6 legacy).
+// Cards only FILL the form — the user always presses Sign in.
 const DEMO_ROLES = [
-  { role: 'Employee', email: 'employee@company.com', pass: 'Employee@2026#R4m!',
+  { name: 'Employee', user: 'employee@company.com', pass: 'Employee@2026#R4m!',
     blurb: 'View your work' },
-  { role: 'Operator', email: 'operator@company.com', pass: 'Operator@2026#T8q!',
+  { name: 'Operator', user: 'operator@company.com', pass: 'Operator@2026#T8q!',
     blurb: 'Operations work' },
-  { role: 'Reviewer', email: 'reviewer@company.com', pass: 'Reviewer@2026#V6n!',
+  { name: 'Reviewer', user: 'reviewer@company.com', pass: 'Reviewer@2026#V6n!',
     blurb: 'Review work' },
-  { role: 'Manager', email: 'manager@company.com', pass: 'Manager@2026#K7p!',
+  { name: 'Manager', user: 'manager@company.com', pass: 'Manager@2026#K7p!',
     blurb: 'Manage teams' },
-  { role: 'Admin', email: 'admin@company.com', pass: 'Admin@2026#S9x!',
+  { name: 'Admin', user: 'admin@company.com', pass: 'Admin@2026#S9x!',
     blurb: 'Full administration' },
 ];
 const DEMO_LEGACY = [
-  ['field1', 'field123'], ['process1', 'proc123'], ['safety1', 'safe123'],
-  ['manager1', 'mgr123'], ['admin1', 'adm123'], ['audit1', 'aud123'],
+  { name: 'Field Engineer', user: 'field1', pass: 'field123',
+    blurb: 'Hands-on docs + AI assistance' },
+  { name: 'Process Engineer', user: 'process1', pass: 'process123',
+    blurb: 'Field work + report drafting' },
+  { name: 'Safety Inspector', user: 'safety1', pass: 'safety123',
+    blurb: 'Inspect documents with AI help' },
+  { name: 'Approving Manager', user: 'manager1', pass: 'manager123',
+    blurb: 'Workflow, reports, model visibility' },
+  { name: 'Security Admin', user: 'admin1', pass: 'admin123',
+    blurb: 'Users, audit, models, system (content-blind)' },
+  { name: 'Auditor', user: 'audit1', pass: 'audit123',
+    blurb: 'Read-only audit, reports, models' },
 ];
+const DEMO_ACCOUNTS = [...DEMO_ROLES, ...DEMO_LEGACY];
 
 const HOME_BY_ROLE = {
   EMPLOYEE: 'workspace', OPERATOR: 'workspace', USER: 'workspace',
@@ -45,7 +57,6 @@ export default function Login({ lang, setLang }) {
   const [busy, setBusy] = useState(false);
   const [demoOk, setDemoOk] = useState(false);
   const [domains, setDomains] = useState([]);
-  const [legacyOpen, setLegacyOpen] = useState(false);
 
   useEffect(() => {
     request('/api/config', { token: 'none' })
@@ -114,7 +125,7 @@ export default function Login({ lang, setLang }) {
       <div className="login-grid">
         <div className="login-box">
           <div className="brand" style={{ marginBottom: 10 }}>
-            <div className="brand-mark">S</div>
+            <div className="brand-mark"><img src="/sihlogo.jpg" alt="Sovereign AI Workbench logo" /></div>
             <div>
               <h2 style={{ fontSize: 21 }}>Sovereign AI Workbench</h2>
               <div className="sub" style={{ margin: 0 }}>{T(lang, 'productTag')}</div>
@@ -218,45 +229,27 @@ export default function Login({ lang, setLang }) {
             </div>
           )}
 
-          {!STRIP_DEMO && demoOk && (
-            <div style={{ marginTop: 18 }}>
-              <h3 style={{ fontSize: 13 }}>{T(lang, 'demoAccounts')}</h3>
-              <p className="mut" style={{ fontSize: 12 }}>{T(lang, 'sihDemoEnv')}</p>
-              <div className="demo-cards">
-                {DEMO_ROLES.map((d) => (
-                  <div className="demo-card" key={d.email}>
-                    <b>{d.role}</b>
-                    <span className="mut">{d.blurb}</span>
-                    <code>{d.email}</code>
-                    <code title="Demo password">{d.pass}</code>
-                    <button type="button" className="btn btn-ghost btn-mini" disabled={busy}
-                      onClick={() => fill(d.email, d.pass)}>
-                      {T(lang, 'useAccount')}
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button type="button" className="linklike" style={{ marginTop: 10 }}
-                onClick={() => setLegacyOpen((o) => !o)}>
-                {legacyOpen ? '▾' : '▸'} {T(lang, 'legacyDemo')}
-              </button>
-              {legacyOpen && (
-                <div className="demo-row">
-                  {DEMO_LEGACY.map(([a, b]) => (
-                    <button key={a} className="demo-chip" disabled={busy}
-                      onClick={() => fill(a, b)}>{a}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
-        <div className="login-side">
-          <div className="value-card"><b>{T(lang, 'vPrivateAI')}</b><p>{T(lang, 'vPrivateAIDesc')}</p></div>
-          <div className="value-card"><b>{T(lang, 'vAttendance')}</b><p>{T(lang, 'vAttendanceDesc')}</p></div>
-          <div className="value-card"><b>{T(lang, 'vTeam')}</b><p>{T(lang, 'vTeamDesc')}</p></div>
-        </div>
+        {!STRIP_DEMO && demoOk && (
+          <div className="demo-panel">
+            <h3 style={{ fontSize: 15 }}>{T(lang, 'demoAccounts')}</h3>
+            <div className="demo-cards">
+              {DEMO_ACCOUNTS.map((d) => (
+                <div className="demo-card" key={d.user}>
+                  <b>{d.name}</b>
+                  <span className="mut">{d.blurb}</span>
+                  <code>{d.user}</code>
+                  <code title="Demo password">{d.pass}</code>
+                  <button type="button" className="btn btn-ghost btn-mini" disabled={busy}
+                    onClick={() => fill(d.user, d.pass)}>
+                    {T(lang, 'useAccount')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch, hasPerm } from '../rbac.js';
+import { friendlyError } from '../status.js';
 import { T } from '../i18n.js';
 import { Card, Spinner, ErrorNote, DocStatusBadge, Empty, Skeleton } from '../ui.jsx';
 
@@ -94,6 +95,9 @@ function ImageCard({ tok, doc, user, lang, onAnalyzed, onAsk }) {
 export default function ImageAnalysis({ tok, user, onAsk, lang }) {
   const [docs, setDocs] = useState(null);
   const [err, setErr] = useState('');
+  const [upBusy, setUpBusy] = useState(false);
+  const upRef = useRef(null);
+  const canUpload = hasPerm(user, 'DOCUMENT_UPLOAD');
 
   const load = () => {
     setErr('');
@@ -102,6 +106,23 @@ export default function ImageAnalysis({ tok, user, onAsk, lang }) {
       .catch((e) => { setErr(e.message); setDocs([]); });
   };
   useEffect(load, [tok]);
+
+  /* Upload stays on the private pipeline: authenticated multipart POST to
+     the backend store (field "f") — no public URL, no external service. */
+  const doUpload = async (file) => {
+    if (!file || upBusy) return;
+    setUpBusy(true); setErr('');
+    try {
+      const fd = new FormData();
+      fd.append('f', file, file.name);
+      const r = await fetch('/api/v1/docs/upload', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + tok }, body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw Object.assign(new Error(j.detail || ('HTTP ' + r.status)), { status: r.status });
+      load();
+    } catch (e) { setErr(friendlyError(e.status, e.message)); }
+    finally { setUpBusy(false); }
+  };
 
   const onAnalyzed = (updated) => {
     setDocs((xs) => (xs || []).map((d) => (d.id === updated.id ? { ...d, ...updated } : d)));
@@ -119,12 +140,25 @@ export default function ImageAnalysis({ tok, user, onAsk, lang }) {
         <span className="mut"> Images stay private until you explicitly choose “Analyze with Private AI”.</span>
       </div>
       <div className="card-actions" style={{ marginBottom: 12 }}>
+        {canUpload && (
+          <button className="btn btn-ghost btn-mini" disabled={upBusy}
+            onClick={() => upRef.current && upRef.current.click()}>
+            {upBusy ? <Spinner label="Uploading…" /> : 'Upload image'}
+          </button>)}
+        {canUpload && (
+          <input ref={upRef} type="file" accept="image/*" hidden disabled={upBusy}
+            onChange={(e) => {
+              const f = e.target.files && e.target.files[0];
+              e.target.value = '';
+              doUpload(f);
+            }} />
+        )}
         <button className="btn btn-ghost btn-mini" onClick={load}>{T(lang, 'refresh')}</button>
       </div>
       <ErrorNote error={err} onRetry={load} />
       {docs === null && <Skeleton rows={4} />}
       {docs !== null && docs.length === 0 && (
-        <Card><Empty title={T(lang, 'noResults')} hint="Upload JPG/PNG images on the Documents page first." /></Card>
+        <Card><Empty title={T(lang, 'noResults')} hint="Use “Upload image” above to add a JPG or PNG." /></Card>
       )}
       <div className="grid-2">
         {(docs || []).map((d) => (

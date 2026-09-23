@@ -1028,6 +1028,49 @@ def perf_criteria(user: dict = Depends(require_perm("WORK_READ"))):
                      "the system never makes employment decisions."}
 
 
+def _financial_summary(user: dict) -> dict | None:
+    """DEMO financial tiles for the overview: sum revenue/expense columns
+    from DEMO_-marked owned spreadsheets using the exact column names the
+    demo schema ships (month,revenue,expense). Only demo-labelled files are
+    surfaced so unlabeled operational data is never presented as financial
+    truth; any permission/parse problem returns None (the UI then shows
+    "insufficient data" — never guessed numbers)."""
+    from . import docs_api
+    from . import docs_store
+    from . import spreadsheet as sheet
+    try:
+        scope = None if docs_api._is_admin(user) else user["id"]
+        candidates = [d for d in docs_store.list_for(scope)
+                      if str(d.get("filename", "")).startswith("DEMO_")][:5]
+        rev = exp = 0.0
+        used = []
+        for d in candidates:
+            full = docs_store.get(d["id"]) or {}
+            if full.get("kind") not in ("csv", "xlsx"):
+                continue
+            with open(docs_api._stored_path(full), "rb") as fh:
+                data = fh.read()
+            try:
+                headers, rows = sheet.raw_rows(full["kind"], data)
+            except sheet.SheetError:
+                continue
+            if "revenue" not in headers or "expense" not in headers:
+                continue
+            agg = sheet.aggregate_rows(headers, rows, ["revenue"], ["expense"])
+            if agg["missing_columns"] or not agg["totals"]["rows_seen"]:
+                continue
+            rev += agg["totals"]["revenue"]
+            exp += agg["totals"]["expenses"]
+            used.append(full["filename"])
+        if not used:
+            return None
+        return {"revenue": round(rev, 2), "expenses": round(exp, 2),
+                "profit": round(rev - exp, 2), "demo": True, "docs": used,
+                "note": "DEMO dataset — sample figures for demonstration only."}
+    except Exception:
+        return None  # fail-closed: a tile must never break the overview
+
+
 @router.get("/api/v1/analytics/overview")
 def team_overview(date_from: str = "", date_to: str = "",
                   user: dict = Depends(require_perm("ANALYTICS_READ"))):
@@ -1079,8 +1122,11 @@ def team_overview(date_from: str = "", date_to: str = "",
                              "assignee": (userstore.find_by_id(t["assignee_id"]) or {})
                              .get("username", t["assignee_id"])} for t in tasks
                             if t["status"] in ("submitted", "needs_correction")][:20]
-    out["financial"] = None  # shown only when a financial demo dataset is configured
-    _audit(user, "ws_analytics", "overview", f"employees={len(uids)} tasks={len(tasks)}")
+    fin = _financial_summary(user)
+    out["financial"] = fin  # DEMO-labelled dataset only; None -> "insufficient data"
+    _audit(user, "ws_analytics", "overview",
+           f"employees={len(uids)} tasks={len(tasks)}"
+           + (f" financial_docs={len(fin['docs'])}" if fin else ""))
     return out
 
 

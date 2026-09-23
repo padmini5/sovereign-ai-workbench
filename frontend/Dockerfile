@@ -6,6 +6,7 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY index.html phase1.html vite.config.js ./
+COPY public ./public
 COPY src ./src
 # SIH demo default: demo accounts stay visible in the bundle.
 # (deploy.sh / compose build inherit this; pass --build-arg

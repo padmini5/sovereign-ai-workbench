@@ -216,9 +216,12 @@ function ManagerView({ user, lang, onNav, onAskWork }) {
         <Tile k={T(lang, 'issuesBlockers')} v={ov.blocked_count ?? 0} />
         {ov.financial ? (
           <React.Fragment>
-            <Tile k={T(lang, 'revenue')} v={ov.financial.revenue} />
-            <Tile k={T(lang, 'expenses')} v={ov.financial.expenses} />
-            <Tile k={T(lang, 'profitLoss')} v={ov.financial.profit} />
+            <Tile k={T(lang, 'revenue')} v={ov.financial.revenue}
+              d={ov.financial.demo ? T(lang, 'demoBadge') : ''} />
+            <Tile k={T(lang, 'expenses')} v={ov.financial.expenses}
+              d={ov.financial.demo ? T(lang, 'demoBadge') : ''} />
+            <Tile k={T(lang, 'profitLoss')} v={ov.financial.profit}
+              d={ov.financial.note || ''} />
           </React.Fragment>
         ) : (
           <Tile k={T(lang, 'profitLoss')} v="—" d={T(lang, 'noFinancialData')} />

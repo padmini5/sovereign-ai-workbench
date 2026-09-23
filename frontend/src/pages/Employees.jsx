@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { request } from '../api.js';
 import { T } from '../i18n.js';
 import { Card, Spinner, ErrorNote, Empty } from '../ui.jsx';
+import AssignWork from './AssignWork.jsx';
+import { STATUS_LABEL } from './StartWork.jsx';
 
 /* Employee management (authorized staff only — backend enforces USER_CREATE /
    USER_UPDATE; UI only hides). Sections keep the form readable. */
@@ -43,6 +45,16 @@ export default function Employees({ tok, user, lang }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [msg, setMsg] = useState('');
   const [tmpPw, setTmpPw] = useState('');
+  const [q, setQ] = useState('');
+  const [deptF, setDeptF] = useState('all');
+  const [tab, setTab] = useState('work');
+  const [detail, setDetail] = useState({});
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignFor, setAssignFor] = useState('');
+  const canAssign = ['ADMIN', 'MANAGER', 'approving_manager'].includes(user.role)
+    && (user.permissions || []).includes('WORK_MANAGE');
+  const canWork = (user.permissions || []).includes('WORK_READ');
+  const canAn = (user.permissions || []).includes('ANALYTICS_READ');
 
   const load = () => {
     setErr('');
@@ -52,9 +64,28 @@ export default function Employees({ tok, user, lang }) {
   useEffect(load, []);
 
   const open = async (id) => {
-    setErr('');
+    setErr(''); setTab('work'); setDetail({});
     try { setSel(await request(`/api/v1/employees/${id}`)); }
-    catch (e) { setErr(e.message); }
+    catch (e) { setErr(e.message); return; }
+    if (canWork) {
+      request(`/api/v1/work/tasks?user_id=${id}`)
+        .then((j) => setDetail((d) => ({ ...d, tasks: j.tasks || [] })))
+        .catch(() => setDetail((d) => ({ ...d, tasks: [] })));
+      request(`/api/v1/work/attendance?user_id=${id}`)
+        .then((j) => setDetail((d) => ({ ...d, attendance: j.rows || [] })))
+        .catch(() => setDetail((d) => ({ ...d, attendance: [] })));
+      request('/api/v1/work/schedules')
+        .then((j) => setDetail((d) => ({ ...d, schedules: j.schedules || [] })))
+        .catch(() => setDetail((d) => ({ ...d, schedules: [] })));
+    }
+    if (canAn) {
+      request('/api/v1/analytics/criteria')
+        .then((c) => setDetail((d) => ({ ...d, crit: c })))
+        .catch(() => {});
+      request(`/api/v1/analytics/employee/${id}`)
+        .then((p) => setDetail((d) => ({ ...d, perf: p })))
+        .catch(() => setDetail((d) => ({ ...d, perf: null })));
+    }
   };
 
   const create = async () => {
@@ -84,6 +115,33 @@ export default function Employees({ tok, user, lang }) {
         onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
     </label>
   );
+
+  const depts = [...new Set((rows || []).map((r) => r.department).filter(Boolean))];
+  const filtered = (rows || []).filter((r) => {
+    const hay = `${r.full_name || ''} ${r.username || ''} ${r.employee_id || ''} ${r.department || ''}`.toLowerCase();
+    if (q && !hay.includes(q.toLowerCase())) return false;
+    if (deptF !== 'all' && (r.department || '') !== deptF) return false;
+    return true;
+  });
+
+  const TABS = [
+    canWork && { k: 'work', label: T(lang, 'myWork') },
+    canWork && { k: 'attendance', label: T(lang, 'attendance') },
+    canWork && { k: 'schedule', label: T(lang, 'schedule') },
+    canAn && { k: 'performance', label: T(lang, 'performance') },
+  ].filter(Boolean);
+  const activeTab = TABS.some((t) => t.k === tab) ? tab : (TABS[0] ? TABS[0].k : '');
+
+  const empSched = () => {
+    const list = detail.schedules;
+    if (!list || !sel) return null;
+    return list.find((r) => r.scope_type === 'user' && r.scope_id === sel.id)
+      || list.find((r) => r.scope_type === 'team' && r.scope_id === (sel.department || ''))
+      || list.find((r) => r.scope_type === 'org')
+      || null;
+  };
+  const schedScopeLabel = (st) =>
+    T(lang, st === 'user' ? 'scopeUser' : st === 'team' ? 'scopeTeam' : 'scopeOrg');
 
   return (
     <div>
@@ -176,15 +234,41 @@ export default function Employees({ tok, user, lang }) {
         </Card>
       )}
 
+      {assignOpen && (
+        <AssignWork user={user} lang={lang} presetAssignee={assignFor}
+          onDone={() => { setAssignOpen(false); setAssignFor(''); load(); }} />
+      )}
+
       <div className="grid-2">
         <Card title={T(lang, 'employees')}>
+          <div className="row" style={{ marginBottom: 8 }}>
+            <input className="input" style={{ flex: 1, minWidth: 140 }}
+              placeholder={T(lang, 'searchEmployees')} value={q}
+              onChange={(e) => setQ(e.target.value)} />
+            <select className="select" value={deptF}
+              onChange={(e) => setDeptF(e.target.value)}>
+              <option value="all">{T(lang, 'allDepartments')}</option>
+              {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            {canAssign && (
+              <button className="btn btn-ghost btn-mini"
+                onClick={() => { setAssignFor(''); setAssignOpen(true); }}>
+                {T(lang, 'assignWork')}</button>)}
+          </div>
           {rows === null && <Spinner label={T(lang, 'loading')} />}
-          {rows !== null && rows.length === 0 && <Empty title={T(lang, 'noResults')} />}
-          {(rows || []).map((r) => (
+          {rows !== null && filtered.length === 0 && <Empty title={T(lang, 'noResults')} />}
+          {filtered.map((r) => (
             <div key={r.id} className="row" style={{ justifyContent: 'space-between', width: '100%' }}>
               <span><b>{r.full_name || r.username}</b>
                 <span className="mut"> · {r.employee_id} · {r.department} · {r.emp_status}</span></span>
-              <button className="btn btn-ghost btn-mini" onClick={() => open(r.id)}>{T(lang, 'viewReport').replace('Report', 'Profile')}</button>
+              <span className="row">
+                {canAssign && (
+                  <button className="btn btn-ghost btn-mini"
+                    onClick={() => { setAssignFor(r.id); setAssignOpen(true); }}>
+                    {T(lang, 'assignWork')}</button>)}
+                <button className="btn btn-ghost btn-mini" onClick={() => open(r.id)}>
+                  {T(lang, 'viewReport').replace('Report', 'Profile')}</button>
+              </span>
             </div>
           ))}
         </Card>
@@ -210,6 +294,94 @@ export default function Employees({ tok, user, lang }) {
                   </button>
                 </div>
               )}
+              <div className="row" style={{ marginTop: 10 }}>
+                {TABS.map((t) => (
+                  <button key={t.k}
+                    className={'btn btn-mini ' + (activeTab === t.k ? '' : 'btn-ghost')}
+                    style={activeTab === t.k ? { fontWeight: 700 } : undefined}
+                    onClick={() => setTab(t.k)}>{t.label}</button>
+                ))}
+                {canAssign && (
+                  <button className="btn btn-ghost btn-mini"
+                    onClick={() => { setAssignFor(sel.id); setAssignOpen(true); }}>
+                    {T(lang, 'assignWork')}</button>)}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                {activeTab === 'work' && (
+                  detail.tasks == null ? <Spinner label={T(lang, 'loading')} />
+                  : detail.tasks.length === 0 ? <Empty title={T(lang, 'noRecordsYet')} />
+                  : detail.tasks.map((t) => (
+                    <div key={t.id} className="row"
+                      style={{ justifyContent: 'space-between', width: '100%', fontSize: 13 }}>
+                      <span>{t.title}
+                        <span className="mut"> · {t.priority || 'medium'}
+                          {t.due_date ? ` · ${T(lang, 'dueDate')}: ${t.due_date}` : ''}
+                          {t.created_by_name ? ` · ${T(lang, 'assignedBy')}: ${t.created_by_name}` : ''}</span></span>
+                      <span className="badge badge-slate">{STATUS_LABEL(t.status, lang)} · {t.progress}%</span>
+                    </div>))
+                )}
+                {activeTab === 'attendance' && (
+                  detail.attendance == null ? <Spinner label={T(lang, 'loading')} />
+                  : detail.attendance.length === 0 ? <Empty title={T(lang, 'noRecordsYet')} />
+                  : <table className="tbl"><tbody>
+                      {detail.attendance.slice(0, 31).map((r) => (
+                        <tr key={r.id || r.date}>
+                          <td className="mut">{r.date}</td>
+                          <td>{r.status}</td>
+                          <td className="mut">{r.check_in || '—'} – {r.check_out || '—'}</td>
+                        </tr>))}
+                    </tbody></table>
+                )}
+                {activeTab === 'schedule' && (
+                  detail.schedules == null ? <Spinner label={T(lang, 'loading')} />
+                  : !empSched() ? <Empty title={T(lang, 'noRecordsYet')}
+                      hint={T(lang, 'orgDefaultSchedule')} />
+                  : (() => {
+                    const sc = empSched();
+                    return (
+                      <div>
+                        <div className="row" style={{ alignItems: 'center' }}>
+                          <b>{sc.name || sc.shift}</b>
+                          <span className="mut"> · {sc.start} – {sc.end}</span>
+                          {sc.demo && <span className="badge badge-amber">{T(lang, 'demoBadge')}</span>}
+                        </div>
+                        <table className="tbl"><tbody>
+                          <tr><td className="mut">{T(lang, 'scope')}</td>
+                            <td>{schedScopeLabel(sc.scope_type)}
+                              {sc.scope_id ? `: ${sc.scope_type === 'user'
+                                ? (sc.scope_id === sel.id ? (sel.full_name || sel.username) : sc.scope_id)
+                                : sc.scope_id}` : ''}</td></tr>
+                          <tr><td className="mut">{T(lang, 'workingDays')}</td>
+                            <td>{(sc.working_days || []).join(', ') || '—'}</td></tr>
+                          <tr><td className="mut">{T(lang, 'holidayList')}</td>
+                            <td>{(sc.holidays || []).join(', ') || '—'}</td></tr>
+                        </tbody></table>
+                      </div>
+                    );
+                  })()
+                )}
+                {activeTab === 'performance' && (
+                  detail.perf == null ? <Empty title={T(lang, 'insufficientData')} />
+                  : (
+                    <div>
+                      <div style={{ fontSize: 26, fontWeight: 700 }}>
+                        {detail.perf.overall != null ? Math.round(detail.perf.overall * 100) : '—'}
+                        <span style={{ fontSize: 13 }}> / 100</span></div>
+                      <table className="tbl"><tbody>
+                        {Object.entries(detail.perf.parts || {}).map(([k, v]) => (
+                          <tr key={k}>
+                            <td className="mut">{k.replace(/_/g, ' ')}</td>
+                            <td>{v == null ? T(lang, 'insufficientData') : Math.round(v * 100)}</td>
+                            <td className="mut">
+                              {detail.crit?.weights?.[k] != null
+                                ? `${Math.round(detail.crit.weights[k] * 100)}%` : ''}</td>
+                          </tr>))}
+                      </tbody></table>
+                      <p className="mut">{T(lang, 'recordedDataNote')}</p>
+                    </div>
+                  ))
+                }
+              </div>
             </div>
           )}
         </Card>

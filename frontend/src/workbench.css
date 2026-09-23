@@ -3,7 +3,7 @@
    high-contrast remap the same tokens. Responsive: sidebar collapses
    under 900px (all themes). */
 
-:root, [data-theme="dark"] {
+:root {
   --bg: #0b111b;
   --bg-soft: #0e1624;
   --bg-deep: #0b1420;
@@ -168,6 +168,7 @@ p { margin: 6px 0; }
   width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
   background: linear-gradient(135deg, #2563eb, #1e40af); font-weight: 800; font-size: 15px; color: #fff;
 }
+.brand-mark img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
 [data-theme="high-contrast"] .brand-mark { border: 2px solid #fff; }
 .brand h1 { font-size: 16.5px; letter-spacing: 0.3px; }
 .brand .sub { font-size: 11.5px; color: var(--mut); margin-top: 1px; }
@@ -322,12 +323,8 @@ label.field > .input, label.field > .select { display: block; width: 100%; margi
   border-radius: 18px; padding: 28px; box-shadow: 0 20px 60px var(--shadow); }
 .login-box h2 { font-size: 21px; }
 .login-box .sub { color: var(--mut); font-size: 13px; margin: 4px 0 16px; }
-.demo-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
-.demo-chip {
-  background: var(--chip-bg); border: 1px solid var(--chip-border); color: var(--chip-text); border-radius: 999px;
-  padding: 5px 12px; font-size: 12px; cursor: pointer;
-}
-.demo-chip:hover { border-color: var(--accent); color: var(--text-strong); }
+.demo-panel { width: 100%; background: var(--card); border: 1px solid var(--border);
+  border-radius: 18px; padding: 18px 20px 20px; box-shadow: 0 8px 24px var(--shadow); }
 
 /* ---------------- demo workflow graphic ---------------- */
 .flow-graphic { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -381,17 +378,6 @@ pre.draft { white-space: pre-wrap; background: var(--bg-deep); border: 1px solid
   background: repeating-linear-gradient(45deg, var(--card-2), var(--card-2) 14px, var(--bg-deep) 14px, var(--bg-deep) 28px);
 }
 
-/* theme preview swatches (settings) */
-.theme-preview { display: flex; gap: 10px; flex-wrap: wrap; }
-.theme-swatch {
-  border: 2px solid var(--border-strong); border-radius: 12px; padding: 10px;
-  width: 150px; cursor: pointer; background: var(--card); color: var(--text);
-  font-size: 12.5px; text-align: left;
-}
-.theme-swatch[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-.theme-swatch .sw { display: flex; gap: 4px; margin: 8px 0; }
-.theme-swatch .sw i { width: 22px; height: 22px; border-radius: 6px; display: block; border: 1px solid rgba(128, 128, 128, 0.5); }
-
 /* responsive */
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
@@ -402,26 +388,22 @@ pre.draft { white-space: pre-wrap; background: var(--bg-deep); border: 1px solid
 }
 
 /* ---------------- enterprise login (SIH demo) ---------------- */
-.login-grid { display: grid; grid-template-columns: 470px 320px; gap: 22px; align-items: start;
-  max-width: 830px; width: 100%; }
-.login-side { display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
-.value-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  padding: 14px 16px; box-shadow: 0 8px 24px var(--shadow); }
-.value-card b { display: block; font-size: 13.5px; margin-bottom: 4px; color: var(--text-strong); }
-.value-card p { margin: 0; font-size: 12.5px; color: var(--mut); line-height: 1.45; }
-.demo-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+.login-grid { display: flex; flex-direction: column; align-items: center; gap: 18px;
+  max-width: 780px; width: 100%; }
+.demo-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
+  grid-auto-rows: 1fr; margin-top: 10px; }
 .demo-card { background: var(--card-2); border: 1px solid var(--border-soft); border-radius: 12px;
   padding: 11px 12px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
   transition: border-color 0.15s, transform 0.15s; }
 .demo-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .demo-card code { font-size: 11px; word-break: break-all; color: var(--mut); }
+.demo-card > button { margin-top: auto; }
+@media (min-width: 540px) { .demo-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 680px) { .demo-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 860px) { .demo-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .pw-wrap { position: relative; display: block; }
 .pw-toggle { position: absolute; right: 6px; top: 6px; }
 .linklike { background: none; border: 0; color: var(--link); cursor: pointer; font-size: 12px; padding: 0; text-align: left; }
 .linklike:hover { text-decoration: underline; }
 .err-note { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 10px;
   padding: 9px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
-@media (max-width: 860px) {
-  .login-grid { grid-template-columns: 1fr; max-width: 470px; }
-  .login-side { padding-top: 0; }
-}

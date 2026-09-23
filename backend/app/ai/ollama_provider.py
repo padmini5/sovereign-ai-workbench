@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
 from typing import Iterator
 
@@ -21,6 +22,16 @@ BASE_URL = (os.getenv("OLLAMA_BASE_URL") or os.getenv("SOV_OLLAMA_URL")
             or "http://localhost:11434").rstrip("/")
 MODEL = (os.getenv("OLLAMA_MODEL") or os.getenv("SOV_OLLAMA_MODEL")
          or os.getenv("SOV_MODEL_DEFAULT") or "")
+
+
+def _pick_model(models: list) -> str:
+    """Choose an installed model when none is configured: prefer chat models
+    (skip embedding-only tags), else the first installed one."""
+    names = [m for m in models if m]
+    for n in names:
+        if "embed" not in n.lower():
+            return n
+    return names[0] if names else ""
 
 
 def _post(path: str, payload: dict, timeout: float):
@@ -40,6 +51,30 @@ class OllamaProvider(ModelProvider):
     def __init__(self, base_url: str = "", model: str = ""):
         self.base_url = (base_url or BASE_URL).rstrip("/")
         self.model = model or MODEL
+        # Model discovery (only when nothing is configured): cache the pick;
+        # an empty result is cached briefly so a later model pull is picked up.
+        self._discovered: str | None = None
+        self._discovered_at = 0.0
+
+    def _resolve_model(self) -> str:
+        """Configured model always wins (env precedence). Otherwise discover an
+        installed model via GET /api/tags; cache empty results for 60s."""
+        if self.model:
+            return self.model
+        now = time.monotonic()
+        if self._discovered is not None and now - self._discovered_at < 60:
+            return self._discovered
+        pick = ""
+        try:
+            with urllib.request.urlopen(self.base_url + "/api/tags", timeout=3) as resp:
+                tags = json.loads(resp.read().decode())
+            pick = _pick_model([m.get("name", "") for m in tags.get("models", [])])
+        except Exception:
+            pick = ""
+        self._discovered, self._discovered_at = pick, now
+        if pick:
+            self.model = pick  # sticky for this instance (env was empty)
+        return pick
 
     def _chat_payload(self, messages: list[dict], system: str, stream: bool, **opts) -> dict:
         msgs = ([{"role": "system", "content": system}] if system else []) + [
@@ -51,7 +86,7 @@ class OllamaProvider(ModelProvider):
         return p
 
     def generate(self, messages: list[dict], system: str = "", **opts) -> str:
-        if not self.model:
+        if not self._resolve_model():
             raise ProviderUnavailable("no model configured (set OLLAMA_MODEL)")
         try:
             out = _post("/api/chat", self._chat_payload(messages, system, False, **opts),
@@ -79,7 +114,7 @@ class OllamaProvider(ModelProvider):
         return msg
 
     def generate_stream(self, messages: list[dict], system: str = "", **opts) -> Iterator[str]:
-        if not self.model:
+        if not self._resolve_model():
             raise ProviderUnavailable("no model configured (set OLLAMA_MODEL)")
         req = urllib.request.Request(
             self.base_url + "/api/chat",
@@ -109,6 +144,13 @@ class OllamaProvider(ModelProvider):
             return {"provider": self.name, "reachable": False, "model": self.model,
                     "detail": f"unreachable: {e}"}
         models = [m.get("name", "") for m in tags.get("models", [])]
+        if not self.model:
+            # Nothing configured: discover an installed model from this tags
+            # response (no extra request) and reflect it in health().
+            pick = _pick_model(models)
+            self._discovered, self._discovered_at = pick, time.monotonic()
+            if pick:
+                self.model = pick
         present = any(self.model in m for m in models) if self.model else False
         return {"provider": self.name, "reachable": True, "model": self.model,
                 "model_present": present, "installed": models[:20],

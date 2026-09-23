@@ -17,14 +17,38 @@ export default function Spreadsheets({ tok, user, lang }) {
   const [out, setOut] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState(null);
+  const [upBusy, setUpBusy] = useState(false);
+  const [upMsg, setUpMsg] = useState('');
+  /* UI-only gate — the server enforces DOCUMENT_UPLOAD independently. */
+  const canUpload = (user.permissions || []).includes('DOCUMENT_UPLOAD');
+
+  const loadDocs = () => Promise.all([
+    request('/api/v1/docs?kind=csv').catch(() => ({ documents: [] })),
+    request('/api/v1/docs?kind=xlsx').catch(() => ({ documents: [] })),
+  ]).then(([a, b]) => {
+    const list = [...(a.documents || []), ...(b.documents || [])];
+    setDocs(list);
+    return list;
+  });
 
   useEffect(() => {
-    Promise.all([
-      request('/api/v1/docs?kind=csv').catch(() => ({ documents: [] })),
-      request('/api/v1/docs?kind=xlsx').catch(() => ({ documents: [] })),
-    ]).then(([a, b]) => setDocs([...(a.documents || []), ...(b.documents || [])]))
-      .catch((e) => { setErr(e.message); setDocs([]); });
+    loadDocs().catch((e) => { setErr(e.message); setDocs([]); });
   }, []);
+
+  const upload = async () => {
+    if (!file || upBusy) return;
+    setUpBusy(true); setErr(''); setUpMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('f', file, file.name);
+      const j = await request('/api/v1/docs/upload', { method: 'POST', body: fd });
+      setFile(null);
+      const list = await loadDocs();
+      if (j?.id) setSel(j.id);
+      setUpMsg(`${j?.filename || ''} — ${list.length} spreadsheet(s) available`);
+    } catch (e) { setErr(e.message); } finally { setUpBusy(false); }
+  };
 
   const run = async () => {
     if (!sel) return;
@@ -49,9 +73,19 @@ export default function Spreadsheets({ tok, user, lang }) {
         <p className="mut">{T(lang, 'totals')} · {T(lang, 'statistics')}</p></div>
       <ErrorNote error={err} />
       <Card title={T(lang, 'spreadsheets')}>
+        {canUpload && (
+          <div className="row" style={{ marginBottom: 10 }}>
+            <input type="file" accept=".csv,.xlsx" style={{ flex: 1 }}
+              onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <button className="btn btn-ghost" disabled={upBusy || !file} onClick={upload}>
+              {upBusy ? <Spinner label="…" /> : T(lang, 'uploadDoc')}
+            </button>
+          </div>
+        )}
+        {upMsg && <p className="ok" style={{ fontSize: 13 }}>{upMsg}</p>}
         {docs === null && <Spinner label={T(lang, 'loading')} />}
         {docs !== null && docs.length === 0 && (
-          <Empty title={T(lang, 'noResults')} hint="Upload a CSV/XLSX on the Documents page first." />)}
+          <Empty title={T(lang, 'noResults')} hint="Upload a CSV or XLSX file to begin." />)}
         {docs && docs.length > 0 && (
           <div className="grid-2">
             <label className="field">Document

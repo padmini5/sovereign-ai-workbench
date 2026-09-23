@@ -152,8 +152,13 @@ compose = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "docker-compose.yml"), encoding="utf-8").read()
 check("frontend not publicly bound", '"8080:8080"' not in compose
       and "127.0.0.1:8080:8080" in compose)
+# Look only at uncommented lines of the db service — comments like
+# "# No ports: ..." mention the word without publishing anything.
+db_block = compose.split("db:")[1].split("backend:")[0]
+db_block = "\n".join(ln for ln in db_block.splitlines()
+                     if not ln.strip().startswith("#"))
 check("db publishes no ports",
-      "pgvector" in compose and "ports:" not in compose.split("db:")[1].split("backend:")[0])
+      "pgvector" in compose and "ports:" not in db_block)
 
 print(f"\nRESULT: {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

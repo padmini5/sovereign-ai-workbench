@@ -273,6 +273,114 @@ def seed_worksheets(tok, ids, emp_tokens):
     print("  worksheets: 2 sheets (1 pending, 1 submitted + approved)")
 
 
+# ---------------------------------------------------------------- reviewer
+
+def seed_reviewer(admin_tok, rev_tok, ids):
+    """Reviewer-specific demo rows (Quality department).
+
+    The manager cannot touch this department, so the admin acts with admin
+    rights — nothing here bypasses RBAC: attendance is marked by the admin,
+    tasks are created by the admin and progressed by the reviewer through the
+    normal owner lane, evidence is attached by the reviewer (WORK_READ)."""
+    today = date.today()
+    start = today - timedelta(days=30)
+    dd = lambda n: (today + timedelta(days=n)).isoformat()  # noqa: E731
+
+    # --- attendance (~30 weekdays, admin scope covers Quality) ---
+    have = {r["date"] for r in _get(
+        admin_tok, f"/api/v1/work/attendance?user_id={ids['reviewer']}"
+                   f"&date_from={start.isoformat()}&date_to={today.isoformat()}")["rows"]}
+    seeded = 0
+    pattern = {11: "late", 20: "leave"}
+    d = start
+    while d <= today:
+        if d.weekday() < 5 and d.isoformat() not in have:
+            _post(admin_tok, "/api/v1/work/attendance", {
+                "user_id": ids["reviewer"], "date": d.isoformat(),
+                "status": pattern.get(d.day % 30, "present"),
+                "note": MARK + "seeded history"})
+            seeded += 1
+        d += timedelta(days=1)
+
+    # --- assignments: one awaiting review, one not started ---
+    all_titles = {t["title"] for t in
+                  _get(admin_tok, "/api/v1/work/tasks")["tasks"]}
+    if MARK + "Quality inspection report" not in all_titles:
+        t1 = _post(admin_tok, "/api/v1/work/tasks", {
+            "title": MARK + "Quality inspection report",
+            "instructions": "Compile the weekly quality inspection findings "
+                            "and submit for approval.",
+            "assignee_id": ids["reviewer"], "priority": "high",
+            "start_date": dd(-2), "due_date": dd(2)})
+        _patch(rev_tok, f"/api/v1/work/tasks/{t1['id']}",
+               {"status": "in_progress", "progress": 60})
+        _patch(rev_tok, f"/api/v1/work/tasks/{t1['id']}",
+               {"status": "submitted", "progress": 100})
+    if MARK + "Supplier certificate review" not in all_titles:
+        _post(admin_tok, "/api/v1/work/tasks", {
+            "title": MARK + "Supplier certificate review",
+            "instructions": "Review incoming supplier certificates against "
+                            "the approved vendor list.",
+            "assignee_id": ids["reviewer"], "priority": "medium",
+            "start_date": dd(1), "due_date": dd(5)})
+
+    # --- evidence on the submitted task (reviewer may attach, WORK_READ) ---
+    have_docs = {doc["filename"] for doc in
+                 _get(rev_tok, "/api/v1/docs")["documents"]}
+    if FILE_MARK + "review_notes.txt" not in have_docs:
+        tasks = _get(rev_tok, "/api/v1/work/tasks")["tasks"]
+        target = next((t for t in tasks
+                       if t["title"] == MARK + "Quality inspection report"), None)
+        if target:
+            r = c.post("/api/v1/work/evidence", headers=H(rev_tok),
+                       files={"f": (FILE_MARK + "review_notes.txt",
+                                    (MARK + "review notes\nchecks: 12/12 "
+                                     "passed\n").encode(), "text/plain")},
+                       data={"task_id": target["id"],
+                             "note": MARK + "inspection notes"})
+            assert r.status_code == 200, f"evidence: {r.status_code} {r.text}"
+
+    # --- worksheet assigned to the reviewer (admin creates + assigns) ---
+    wtitles = {w["title"] for w in
+               _get(admin_tok, "/api/v1/work/worksheets")["worksheets"]}
+    if MARK + "Quality audit checklist" not in wtitles:
+        w = _post(admin_tok, "/api/v1/work/worksheets", {
+            "title": MARK + "Quality audit checklist",
+            "description": "Weekly quality audit rows for the demo.",
+            "columns": [{"name": "check", "type": "text"},
+                        {"name": "result", "type": "text"},
+                        {"name": "notes", "type": "text"}]})
+        _post(admin_tok, f"/api/v1/work/worksheets/{w['id']}/assign",
+              {"assignee_id": ids["reviewer"]})
+
+    print(f"  reviewer: attendance backfilled ({seeded} missing day(s)), "
+          "2 assignments (1 awaiting review), evidence + worksheet added")
+
+
+# ---------------------------------------------------------------- operator
+
+def seed_operator(mgr_tok, op_tok, ids):
+    """OPERATOR self-service demo rows (Production department — the manager's
+    normal scope; nothing bypasses RBAC): one realistic assignment in the
+    owner lane so the operator portal shows work they can continue and submit
+    for review."""
+    titles = {t["title"] for t in _get(mgr_tok, "/api/v1/work/tasks")["tasks"]}
+    if MARK + "Shift handover summary" in titles:
+        print("  operator: already seeded — skipping")
+        return
+    today = date.today()
+    t = _post(mgr_tok, "/api/v1/work/tasks", {
+        "title": MARK + "Shift handover summary",
+        "instructions": "Summarize shift events, open issues, and hand over "
+                        "to the incoming crew.",
+        "assignee_id": ids["operator"], "priority": "medium",
+        "start_date": (today - timedelta(days=1)).isoformat(),
+        "due_date": (today + timedelta(days=3)).isoformat()})
+    _patch(op_tok, f"/api/v1/work/tasks/{t['id']}",
+           {"status": "in_progress", "progress": 40})
+    print("  operator: 1 assignment seeded (in progress)")
+
+
 # ---------------------------------------------------------------- documents
 
 def _csv_bytes():
@@ -536,6 +644,8 @@ def main():
     seed_tasks(mgr, ids, tokens)
     seed_evidence(tokens["employee1"], ids)
     seed_worksheets(mgr, ids, tokens)
+    seed_reviewer(tokens["admin"], tokens["reviewer"], ids)
+    seed_operator(tokens["manager"], tokens["operator"], ids)
     seed_documents(tokens)
     seed_reports(mgr, ids, tokens)
     seed_feedback(mgr, ids, tokens)

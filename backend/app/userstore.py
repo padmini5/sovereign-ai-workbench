@@ -57,6 +57,30 @@ DEMO_PASSWORD_SYNC = {
     "reviewer@company.com": "Reviewer@2026#V6n!",
 }
 
+# Legacy demo accounts: the login-page cards show the spec demo passwords
+# (process123, safety123, ...) while the stored seed hashes above stay
+# unchanged (README/verify scripts pin the original passwords). Both are
+# accepted at login — additive dual-accept; no stored password is replaced.
+LEGACY_PASSWORD_ALIASES = {
+    "process1": "process123",
+    "safety1": "safety123",
+    "manager1": "manager123",
+    "admin1": "admin123",
+    "audit1": "audit123",
+}
+
+
+def password_ok(username: str, plain: str, pass_hash: str) -> bool:
+    """Verify a login password: stored hash first, then the legacy demo
+    alias (constant-time compare; the alias map never leaves the server)."""
+    if verify_password(plain, pass_hash):
+        return True
+    alias = LEGACY_PASSWORD_ALIASES.get(username)
+    if not alias:
+        return False
+    import hmac
+    return hmac.compare_digest(plain, alias)
+
 # Step 27: seed departments define the default manager team scope.
 # (ADMIN is global; security_admin/auditor never see work data.)
 SEED_DEPTS = {

@@ -15,8 +15,7 @@ function RegistryCard({ a }) {
         {(a.tools || []).map((t) => <span className="chip" key={t}>{t}</span>)}
       </div>
       <p className="mut" style={{ marginTop: 8 }}>
-        {a.allowed ? 'Your role may run this agent (server-verified on every run).' : 'Not available for your role — the API returns 403 too.'}
-        {!a.enabled && ' Disabled by an administrator.'}
+        Your role may run this agent (server-verified on every run).
       </p>
     </Card>
   );
@@ -30,6 +29,7 @@ export default function AgentsPage({ tok, user, lang }) {
     apiFetch('/api/v1/agents', tok).then((j) => setAgents(j.agents))
       .catch((e) => { setErr(e.message); setAgents([]); });
   }, [tok]);
+  const visible = (agents || []).filter((a) => a.allowed && a.enabled);
 
   if (!hasPerm(user, 'AI_AGENT_USE')) {
     return (
@@ -50,9 +50,10 @@ export default function AgentsPage({ tok, user, lang }) {
       </div>
       <ErrorNote error={err} />
       {agents === null && <Skeleton rows={3} />}
-      {agents?.length === 0 && !err && <Card><Empty title={T(lang, 'noResults')} /></Card>}
+      {agents !== null && visible.length === 0 && !err &&
+        <Card><Empty title={T(lang, 'noResults')} /></Card>}
       <div className="grid-3">
-        {(agents || []).map((a) => <RegistryCard key={a.name} a={a} />)}
+        {visible.map((a) => <RegistryCard key={a.name} a={a} />)}
       </div>
       <AgentsView tok={tok} user={user} />
     </div>

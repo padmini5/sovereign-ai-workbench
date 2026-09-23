@@ -95,8 +95,9 @@ export default function Reports({ tok, user, lang }) {
             <div>
               <p className="mut">{T(lang, 'dataPeriod')}: {sel.period_from || '?'} – {sel.period_to || '?'}</p>
               <table className="tbl"><tbody>
-                {Object.entries(sel.metrics || {}).filter(([, v]) => v !== null && typeof v !== 'object').map(([k, v]) => (
-                  <tr key={k}><td className="mut">{k.replace(/_/g, ' ')}</td><td>{String(v)}</td></tr>))}
+                {Object.entries(sel.metrics || {}).filter(([, v]) => v == null || typeof v !== 'object').map(([k, v]) => (
+                  <tr key={k}><td className="mut">{k.replace(/_/g, ' ')}</td>
+                    <td>{v == null ? T(lang, 'insufficientData') : String(v)}</td></tr>))}
               </tbody></table>
               {sel.analysis && <p style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{sel.analysis}</p>}
               {sel.official_remarks && <p className="mut">{T(lang, 'managerReview')}: {sel.official_remarks}</p>}

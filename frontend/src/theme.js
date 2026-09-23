@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-
-/* Three product themes: dark (default), light, high-contrast.
+/* Light-only product theme: the app always boots light (initTheme below
+   forces + persists 'light'). The palette/theme ids below remain only so
+   the persistence helpers and the CSS contrast blocks keep their contract.
    Persisted in localStorage; applied as data-theme on <html> so the
    all-CSS-variable stylesheet (workbench.css) and var()-based inline
    styles follow instantly. No backend involvement. */
@@ -42,14 +42,8 @@ export function saveTheme(id) {
   return v;
 }
 
-/* Apply the stored theme as early as possible (call once at startup). */
+/* Apply the light theme at startup (call once at startup): the product is
+   light-only — always force light regardless of any stale stored value. */
 export function initTheme() {
-  return applyTheme(readTheme());
-}
-
-export function useTheme() {
-  const [theme, setTheme] = useState(readTheme);
-  useEffect(() => { applyTheme(theme); }, [theme]);
-  const set = useCallback((id) => setTheme(saveTheme(id)), []);
-  return [theme, set];
+  return saveTheme('light');
 }

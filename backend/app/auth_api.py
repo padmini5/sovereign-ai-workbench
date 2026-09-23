@@ -142,7 +142,7 @@ def login(b: LoginIn):
                          "login_failure", resource=b.username, decision="deny",
                          detail="account suspended")
         raise HTTPException(403, "account suspended")
-    if not rec or not verify_password(b.password, rec["pass_hash"]):
+    if not rec or not userstore.password_ok(rec["username"], b.password, rec["pass_hash"]):
         audit_log.append(rec["id"] if rec else None, rec["role"] if rec else None,
                          "login_failure", resource=b.username, decision="deny")
         raise HTTPException(401, "invalid username or password")
@@ -273,7 +273,7 @@ def password_change(b: PasswordChange, user: dict = Depends(get_current_user)):
     if err:
         raise HTTPException(400, err)
     rec = userstore.find_by_id(user["id"])
-    if not rec or not verify_password(b.current_password, rec["pass_hash"]):
+    if not rec or not userstore.password_ok(rec["username"], b.current_password, rec["pass_hash"]):
         raise HTTPException(401, "current password is incorrect")
     userstore.set_password(user["id"], b.new_password)
     audit_log.append(user["id"], user["role"], "PASSWORD_CHANGED",
