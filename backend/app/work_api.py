@@ -1040,11 +1040,18 @@ def _financial_summary(user: dict) -> dict | None:
     from . import spreadsheet as sheet
     try:
         scope = None if docs_api._is_admin(user) else user["id"]
+        # Cap by spreadsheet kind BEFORE any slice: an admin's list includes
+        # every user's DEMO files (txt/docx first), and slicing first would
+        # starve the scan. Stop after 3 usable datasets.
         candidates = [d for d in docs_store.list_for(scope)
-                      if str(d.get("filename", "")).startswith("DEMO_")][:5]
+                      if str(d.get("filename", "")).startswith("DEMO_")
+                      and d.get("kind") in ("csv", "xlsx")][:20]
         rev = exp = 0.0
         used = []
+        seen = set()  # mirrored seed files (CSV + XLSX of the same rows)
         for d in candidates:
+            if len(used) >= 3:
+                break
             full = docs_store.get(d["id"]) or {}
             if full.get("kind") not in ("csv", "xlsx"):
                 continue
@@ -1059,6 +1066,11 @@ def _financial_summary(user: dict) -> dict | None:
             agg = sheet.aggregate_rows(headers, rows, ["revenue"], ["expense"])
             if agg["missing_columns"] or not agg["totals"]["rows_seen"]:
                 continue
+            key = (agg["totals"]["revenue"], agg["totals"]["expenses"],
+                   agg["totals"]["rows_seen"])
+            if key in seen:
+                continue  # same dataset shipped twice -> counted once
+            seen.add(key)
             rev += agg["totals"]["revenue"]
             exp += agg["totals"]["expenses"]
             used.append(full["filename"])
