@@ -4,7 +4,6 @@
 
 export const NAV = [
   { id: 'dashboard', labelKey: 'dashboard', ico: '◧', show: () => true },
-  { id: 'workspace', labelKey: 'workspace', ico: '◈', perm: 'WORK_READ' },
   { id: 'employees', labelKey: 'employees', ico: '⛉', perm: 'USER_READ' },
   { id: 'profile', labelKey: 'myProfile', ico: '⛇', show: () => true },
   { id: 'attendance', labelKey: 'attendance', ico: '◷', perm: 'ATTENDANCE_READ' },
@@ -20,6 +19,7 @@ export const NAV = [
   { id: 'reports', labelKey: 'reports', ico: '▦', perm: 'REPORT_READ' },
   { id: 'audit', labelKey: 'audit', ico: '☰', perm: 'AUDIT_READ' },
   { id: 'admin', labelKey: 'admin', ico: '⛨', roles: ['ADMIN', 'security_admin'] },
+  { id: 'system', labelKey: 'systemCaps', ico: '◈', roles: ['ADMIN', 'security_admin'] },
   { id: 'settings', labelKey: 'settings', ico: '⚒', show: () => true },
 ];
 

@@ -24,7 +24,9 @@ class MockProvider(ModelProvider):
         role = (opts.get("role") or "USER").upper()
         tools = opts.get("tools_used") or []
         tool_ctx = opts.get("tool_context") or ""
-        self.calls.append({"n_messages": len(messages), "role": role, "tools": list(tools)})
+        self.calls.append({"n_messages": len(messages), "role": role,
+                           "tools": list(tools),
+                           "model": str(opts.get("model") or "")})
         last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
         out = f"[{role} assistant via mock] {last[:500]}"
         if tools:

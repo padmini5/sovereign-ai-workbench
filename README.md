@@ -21,26 +21,63 @@ cd frontend && npm install && npm run dev
 ```
 Demo logins: `field1/field123`, `process1/proc123`, `safety1/safe123`, `manager1/mgr123`, `admin1/adm123`, `audit1/aud123`.
 
-## 90-second demo
-1. Login as `field1`, run the default corrosion query → only public+internal chunks, confidential blocked (see filter stats).
-2. Login as `manager1`, same query → confidential U2 chunks appear with `[doc#cN p.X]` citations.
-3. As manager: Sign with PQC key → signed DOCX download. Network monitor stays at 0.
-4. Toggle hardware tier 7b↔3b, re-run to show speed/quality tradeoff.
-5. Auditor (`audit1`) verifies audit trail.
+## Demo (SIH)
+
+**Primary workflow — inspection report to human-approved result**
+1. Sign in with any shown demo account (the login page lists all 11;
+   "Use account" only fills the form — you always press Sign in).
+2. Dashboard → Documents: upload an inspection report and watch
+   Uploaded → Processing → Ready with the extracted text.
+3. Ask an authorized question in the AI Assistant: answers cite only the
+   files your role may read, with visible source evidence.
+4. Agents → inspection approval: run the analysis, review the generated
+   approval note, download the real DOCX.
+5. The run waits at **Awaiting Human Approval**; a manager/admin approves,
+   and the decision shows up in the Audit log — no fake success anywhere.
+
+**Coding demo**
+Agents → Coding Agent: generated code + tests execute in the secure local
+sandbox (no network, read-only files, dropped privileges, hard limits,
+cleanup). The result is marked VERIFIED only when the sandboxed tests
+really passed.
+
+**Model routing (server-side; users never pick models)**
+General/document tasks → `llama3.2:3b`, coding tasks → `qwen2.5-coder:1.5b`
+(pull once with `ollama pull llama3.2:3b qwen2.5-coder:1.5b`; nothing
+downloads during build). Vision stays optional — leave `SOV_MODEL_VISION`
+unset and the Image Analysis page honestly reports "Available when local
+vision model is configured."
+
+**Security & deployment**
+Role-based access re-checked on every request, permission-aware RAG,
+private image storage, full audit trail. Deploy with Docker
+(`docker compose up -d`, localhost-only ports) or over SSH/VPS:
+`docs/DEPLOY_SSH_DOCKER.md`.
 
 ## Offline / sovereign notes
 - Retrieval enforces `roles.yaml` tier+unit filter BEFORE the LLM sees text (`backend/app/rag.py:query`). ChromaDB (persistent, `backend/chroma_db`) applies the tier `where` pre-filter; TF-IDF re-ranks the allowed subset. Custom offline hash embeddings — no embedding-model downloads, works fully offline. `filter_stats.backend` reports `chroma(filter)+tfidf-rank` (or `tfidf` if Chroma is missing).
-- Models: Ollama `qwen2.5:7b/3b-instruct`, `bge-m3`, `moondream` when reachable; deterministic local fallback otherwise — zero network required. `/api/health` reports `llm_mode: ollama|local-fallback`. Ollama is never mandatory.
+- Models: routed server-side per task — GENERAL/DOCUMENT use `llama3.2:3b`,
+  CODING uses `qwen2.5-coder:1.5b` (pull once:
+  `ollama pull llama3.2:3b qwen2.5-coder:1.5b`; nothing downloads at build
+  time). VISION is optional: leave `SOV_MODEL_VISION` unset and the Image
+  Analysis page honestly reports "Available when local vision model is
+  configured." `/api/v1/ai/status` reports actual reachability — never
+  assumed. Ollama is never mandatory (the mock provider keeps tests and
+  offline demos deterministic).
 - PQC adapter (`backend/app/pqc.py`): real ML-DSA-65 + ML-KEM when liboqs is ready AND `SOV_PQC=1` is set; otherwise an honestly-labelled Ed25519 fallback (`PQC unavailable / fallback signing (NOT ML-DSA)` in UI + `/api/health`). `SOV_PQC` defaults to `0` because importing `oqs-python` without built liboqs triggers a git-clone/build attempt (network egress) and raises `SystemExit`. `SOV_HYBRID=1` enables hybrid-note mode. Rationale: NIST PQC standard + harvest-now-decrypt-later.
 - UI: 21 interface languages (English default + 20 Indian-scheduled languages) via the header selector; technical IDs, citations `[doc#cN p.X]`, units, filenames, algorithm names stay in English. `GET /api/languages` lists them.
-- Sandbox: production runs generated code in `docker --network none`; prototype restricts to local exec stub.
+- Sandbox: generated code runs in a locked-down local Docker container
+  (`--network none`, `--read-only`, `--cap-drop ALL`, `no-new-privileges`,
+  resource limits, workspace streamed in over stdin, automatic cleanup).
+  If no sandbox runtime is available the run fails closed with an honest
+  error — code never executes unsandboxed.
 - Seed KB: `backend/seed_docs/*.json` across public/internal/confidential/restricted.
 - Tests: `python verify.py` (original suite) + `python verify_phase2.py` (chroma backend, i18n, PQC honesty, 403, zero app egress).
 
 ## One-command deploy (when Docker present)
 ```
 docker compose up
-ollama pull qwen2.5:7b-instruct qwen2.5:3b-instruct bge-m3 moondream
+ollama pull llama3.2:3b qwen2.5-coder:1.5b
 ```
 
 ## Docker deployment (Step 24)
@@ -78,7 +115,9 @@ paths stay confined to `/data` (Step 23 guards apply in-container too).
 Ollama / local AI:
 ```
 docker compose --profile local-ai up -d
-docker compose exec ollama ollama pull qwen2.5:7b-instruct
+docker compose exec ollama ollama pull llama3.2:3b        # GENERAL/DOCUMENT
+docker compose exec ollama ollama pull qwen2.5-coder:1.5b # CODING
+:: optional vision: set SOV_MODEL_VISION in .env, then pull that model
 :: or point at an external daemon: SOV_OLLAMA_URL=http://host:11434
 :: without Ollama the app runs on the mock provider (see /api/v1/ai/status)
 ```

@@ -157,6 +157,30 @@ Rollback: `git checkout <previous-tag> && docker compose build && docker
 compose up -d` (+ DB restore from section 9 if the schema moved). Never
 `docker compose down -v` during an update; never prune volumes automatically.
 
+### Local models (never pulled at build time)
+
+The stack builds and starts with NO model download. For real local answers,
+pull the two routed models once on the server (optional `local-ai` profile):
+
+```bash
+docker compose --profile local-ai up -d
+docker compose exec ollama ollama pull llama3.2:3b          # GENERAL/DOCUMENT
+docker compose exec ollama ollama pull qwen2.5-coder:1.5b   # CODING
+```
+
+Optional vision capability — without `SOV_MODEL_VISION` the Image Analysis
+page honestly reports "Available when local vision model is configured."
+(nothing fakes visual output):
+
+```bash
+echo 'SOV_MODEL_VISION=<your-local-vision-model>' >> .env
+docker compose up -d
+docker compose exec ollama ollama pull <your-local-vision-model>
+```
+
+PostgreSQL is never published (internal network only) and the model daemon
+stays loopback/reverse-proxy only — never internet-exposed (section 2).
+
 ## 11. Production configuration checklist
 
 - `SOV_ENV=production`, `SOV_DEMO_LOGIN=0`, restrictive `SOV_CORS_ORIGINS`

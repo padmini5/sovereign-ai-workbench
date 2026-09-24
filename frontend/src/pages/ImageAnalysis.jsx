@@ -8,6 +8,10 @@ import { Card, Spinner, ErrorNote, DocStatusBadge, Empty, Skeleton } from '../ui
    backend's vision analysis (POST /api/v1/docs/{id}/analyze). Absent-engine
    states are surfaced with friendly wording, never engine names. */
 
+/* Honest capability states (Step 4): shown verbatim, never faked. */
+const VISION_NOTE_OFF = 'Image analysis capability: Available when local vision model is configured.';
+const VISION_NOTE_ON = 'Image analysis capability: a local vision model is configured for this deployment.';
+
 function ImageCard({ tok, doc, user, lang, onAnalyzed, onAsk }) {
   const [img, setImg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -96,8 +100,18 @@ export default function ImageAnalysis({ tok, user, onAsk, lang }) {
   const [docs, setDocs] = useState(null);
   const [err, setErr] = useState('');
   const [upBusy, setUpBusy] = useState(false);
+  const [visionOn, setVisionOn] = useState(null);
   const upRef = useRef(null);
   const canUpload = hasPerm(user, 'DOCUMENT_UPLOAD');
+
+  /* Honest vision capability state from the server's routing report
+     ("" / missing = not configured). Any failure falls back to the
+     honest "not configured" wording — never a fake capability claim. */
+  useEffect(() => {
+    apiFetch('/api/v1/ai/status', tok)
+      .then((j) => setVisionOn(!!(j && j.routing && j.routing.vision)))
+      .catch(() => setVisionOn(false));
+  }, [tok]);
 
   const load = () => {
     setErr('');
@@ -139,6 +153,9 @@ export default function ImageAnalysis({ tok, user, onAsk, lang }) {
         Image Access: Authorization Required.
         <span className="mut"> Images stay private until you explicitly choose “Analyze with Private AI”.</span>
       </div>
+      {visionOn !== null && (
+        <div className="note">{visionOn ? VISION_NOTE_ON : VISION_NOTE_OFF}</div>
+      )}
       <div className="card-actions" style={{ marginBottom: 12 }}>
         {canUpload && (
           <button className="btn btn-ghost btn-mini" disabled={upBusy}

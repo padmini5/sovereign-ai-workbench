@@ -42,11 +42,11 @@ const DEMO_LEGACY = [
 const DEMO_ACCOUNTS = [...DEMO_ROLES, ...DEMO_LEGACY];
 
 const HOME_BY_ROLE = {
-  EMPLOYEE: 'workspace', OPERATOR: 'workspace', USER: 'workspace',
-  field_engineer: 'workspace', process_engineer: 'workspace',
-  safety_inspector: 'workspace',
-  REVIEWER: 'workspace', MANAGER: 'workspace', approving_manager: 'workspace',
-  ADMIN: 'workspace', security_admin: 'admin', auditor: 'audit',
+  EMPLOYEE: 'dashboard', OPERATOR: 'dashboard', USER: 'dashboard',
+  field_engineer: 'dashboard', process_engineer: 'dashboard',
+  safety_inspector: 'dashboard',
+  REVIEWER: 'dashboard', MANAGER: 'dashboard', approving_manager: 'dashboard',
+  ADMIN: 'dashboard', security_admin: 'admin', auditor: 'audit',
 };
 
 export default function Login({ lang, setLang }) {
@@ -77,7 +77,7 @@ export default function Login({ lang, setLang }) {
     setBusy(true); setErr('');
     try {
       const me = await login(user, pass); // session.subscribe drives the shell
-      const home = HOME_BY_ROLE[me?.role] || 'workspace';
+      const home = HOME_BY_ROLE[me?.role] || 'dashboard';
       location.hash = '#/' + home;
     } catch (e) {
       const msg = String(e.message || '').toLowerCase();

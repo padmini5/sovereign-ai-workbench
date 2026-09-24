@@ -15,5 +15,8 @@ cryptography==44.0.2
 chromadb==1.5.9
 vosk==0.3.45
 pyttsx3==2.99
+pytesseract==0.3.13
 # Optional (auto-used if installed — no failure if missing):
 # ollama, oqs-python
+# pytesseract needs the tesseract binary on PATH for OCR (installed in the
+# backend image via backend/Dockerfile; without it OCR reports ocr_unavailable).

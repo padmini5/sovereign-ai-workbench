@@ -109,8 +109,12 @@ class KB:
             import chromadb
             client = chromadb.PersistentClient(path=CHROMA_DIR)
             self._chroma = client.get_or_create_collection("sov_kb")  # >=3 chars
-            if self._chroma.count() == 0 and self.chunks:
-                self._chroma.add(
+            # Always upsert (not only when empty): a persistent collection
+            # created before a new seed existed used to filter that seed out
+            # of every query forever. Upsert is idempotent — existing entries
+            # refresh, new seeds get indexed. Filtering semantics unchanged.
+            if self.chunks:
+                self._chroma.upsert(
                     ids=[c["chunk_id"] for c in self.chunks],
                     documents=[c["text"] for c in self.chunks],
                     metadatas=[{"tier": c["clearance_tier"], "unit": c["unit"]}

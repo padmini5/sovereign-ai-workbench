@@ -15,6 +15,7 @@ from .agents_api import router as agents_v1_router
 from .admin_api import router as admin_v1_router
 from .images_api import router as images_v1_router
 from .work_api import router as work_v1_router
+from .approvals_api import router as approvals_v1_router
 from .devices import router as devices_router
 from .employees_api import router as employees_router
 from .kb import kb  # legacy seed-KB (Phase 4 pipeline lives in .rag)
@@ -58,6 +59,7 @@ app.include_router(agents_v1_router)  # Step 21 agents API (/api/v1/agents)
 app.include_router(admin_v1_router)  # Step 22 ADMIN API (/api/v1/admin)
 app.include_router(images_v1_router)  # Image privacy: explicit private analysis
 app.include_router(work_v1_router)  # Step 27 workspace/analytics/reports
+app.include_router(approvals_v1_router)  # SIH flagship: inspection approval notes
 app.include_router(devices_router)  # SIH demo: attendance device gateway
 app.include_router(employees_router)  # Employee profiles + management
 monitor.start()

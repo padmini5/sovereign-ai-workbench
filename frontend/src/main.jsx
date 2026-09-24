@@ -21,7 +21,7 @@ import Reports from './pages/Reports.jsx';
 import Audit from './pages/Audit.jsx';
 import Admin from './pages/Admin.jsx';
 import SettingsPage from './pages/Settings.jsx';
-import Workspace from './pages/Workspace.jsx';
+import SystemCapabilities from './pages/SystemCapabilities.jsx';
 import Attendance from './pages/Attendance.jsx';
 import Worksheets from './pages/Worksheets.jsx';
 import Spreadsheets from './pages/Spreadsheets.jsx';
@@ -38,6 +38,12 @@ const UI_LANG_KEY = 'sov_ui_lang';
 
 function readRoute() {
   const h = (location.hash || '').replace(/^#\/?/, '');
+  /* Legacy/alternate paths land on the one main workspace (Dashboard):
+     the old workspace route, the generic work path, and login/forgot
+     (handled by the Login screen when signed out). */
+  if (h === 'workspace' || h === 'work' || h === 'login' || h === 'forgot') {
+    return 'dashboard';
+  }
   return h || 'dashboard';
 }
 
@@ -122,7 +128,6 @@ function Shell() {
     }
     switch (active.id) {
       case 'dashboard': return <Dashboard user={user} lang={lang} onNav={go} />;
-      case 'workspace': return <Workspace tok={tok} user={user} lang={lang} onNav={go} onAskWork={onAskWork} />;
       case 'employees': return <Employees tok={tok} user={user} lang={lang} />;
       case 'profile': return <Profile tok={tok} user={user} lang={lang} />;
       case 'attendance': return <Attendance tok={tok} user={user} lang={lang} />;
@@ -138,6 +143,7 @@ function Shell() {
       case 'reports': return <Reports tok={tok} user={user} lang={lang} />;
       case 'audit': return <Audit lang={lang} />;
       case 'admin': return <Admin tok={tok} user={user} lang={lang} />;
+      case 'system': return <SystemCapabilities user={user} lang={lang} />;
       case 'settings': return (
         <SettingsPage user={user} lang={lang} setLang={setLang} onLogout={doLogout} />
       );

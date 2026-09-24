@@ -8,9 +8,10 @@
   GET  /ai/status              provider/model/reachability (no secrets)
   GET  /ai/tools               tools visible to caller (execution re-checks)
 
-Audit: ai_chat / ai_chat_denied / ai_provider_error events carry metadata
-only (counts, lengths, provider, model, latency, tools) — never prompt or
-message content.
+Audit: ai_chat / ai_chat_denied / ai_provider_error / model_route events
+carry metadata only (counts, lengths, provider, model, task_type, latency,
+tools) — never prompt or message content. model_route records the server-side
+routing decision (task_type=<CATEGORY> model=<local model>) after auth.
 """
 from __future__ import annotations
 
@@ -61,6 +62,21 @@ class ChatIn(BaseModel):
     document_ids: list[str] | None = None  # RAG scope: verified before retrieval
     image_ids: list[str] | None = None  # explicit authorized image refs ONLY
     mode: str = "general"  # general | my_docs
+    # Explicit task-routing metadata (optional): GENERAL | DOCUMENT | CODING.
+    # Validated server-side; classification happens only AFTER auth + RBAC +
+    # document authorization. Never a model name — clients cannot pick models.
+    task_type: str | None = None
+
+    @field_validator("task_type")
+    @classmethod
+    def _task_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from .ai.task_router import CHAT_CATEGORIES
+        u = str(v).strip().upper()
+        if u not in CHAT_CATEGORIES:
+            raise ValueError(f"task_type must be one of {CHAT_CATEGORIES}")
+        return u
 
     @field_validator("messages")
     @classmethod
@@ -250,21 +266,35 @@ def chat_respond(user: dict, b: ChatIn) -> dict:
                              detail=f"docs={','.join(b.document_ids or []) or 'my_docs'} "
                                     f"hits=0 mode={b.mode} lang={lang}")
             return {"conversation_id": convo["id"], "message": asst, "provider": "none",
-                    "model": "none", "prompt_id": user["role"], "tools_used": ["rag"],
+                    "model": "none", "task_type": "", "selected_model": "",
+                    "prompt_id": user["role"], "tools_used": ["rag"],
                     "sources": [], "lang": lang, "translated": lang != "en",
                     "elapsed_s": round(time.time() - t0, 3)}
+        # --- task router (Step 2): runs strictly AFTER authentication, RBAC,
+        # and document authorization above; the selected model is an already-
+        # configured LOCAL model. The model is not a security boundary: it only
+        # ever sees extra_ctx built from permission-filtered retrieval.
+        from .ai.task_router import classify, model_for
+        cat = classify(b.messages[-1].content, explicit=b.task_type,
+                       has_docs=rag_used)
+        selected = model_for(cat)
+        audit_log.append(user["id"], user["role"], "model_route",
+                         resource=convo["id"],
+                         detail=f"task_type={cat} model={selected}")
         try:
-            res = svc.chat(user, msgs, tools=b.tools, lang=lang, extra_context=extra_ctx)
+            res = svc.chat(user, msgs, tools=b.tools, lang=lang,
+                           extra_context=extra_ctx, task_type=cat)
         except HTTPException:
             raise
-        except ProviderUnavailable as e:
+        except (ProviderUnavailable, AIError) as e:
+            # Honest failure: no other model is silently substituted, no fake
+            # answer. The real cause stays in the audit record.
             audit_log.append(user["id"], user["role"], "ai_provider_error",
-                             resource="chat", decision="deny", detail=str(e)[:200])
-            raise HTTPException(502, f"AI provider unavailable: {e}")
-        except AIError as e:
-            audit_log.append(user["id"], user["role"], "ai_provider_error",
-                             resource="chat", decision="deny", detail=str(e)[:200])
-            raise HTTPException(502, f"AI provider error: {e}")
+                             resource="chat", decision="deny",
+                             detail=f"task_type={cat} model={selected} "
+                                    f"error={str(e)[:160]}")
+            raise HTTPException(
+                502, "AI provider unavailable: Selected local model is unavailable.")
         text = _with_sources(res["text"], sources)
         text, translated = translate_answer(text, lang, tr)  # Sources stay English
         store.add_message(convo["id"], "user", b.messages[-1].content, lang=lang)
@@ -276,6 +306,7 @@ def chat_respond(user: dict, b: ChatIn) -> dict:
         audit_log.append(
             user["id"], user["role"], "ai_chat", resource=convo["id"],
             detail=f"provider={res['provider']} model={res['model']} "
+                   f"task_type={res['task_type']} selected_model={res['selected_model']} "
                    f"tools={','.join(res['tools_used']) or '-'} lang={lang} "
                    f"translated={translated} "
                    f"latency={time.time()-t0:.2f}s in_chars={sum(len(m['content']) for m in msgs)} "
@@ -286,6 +317,8 @@ def chat_respond(user: dict, b: ChatIn) -> dict:
                                     f"hits={len(sources)} mode={b.mode} lang={lang}")
         return {"conversation_id": convo["id"], "message": asst,
                 "provider": res["provider"], "model": res["model"],
+                "task_type": res["task_type"],
+                "selected_model": res["selected_model"],
                 "prompt_id": res["prompt_id"], "tools_used": tools_used,
                 "sources": sources, "lang": lang, "translated": translated,
                 "elapsed_s": res["elapsed_s"]}
@@ -332,9 +365,21 @@ def chat_stream(b: ChatIn, user: dict = Depends(require_perm("AI_CHAT"))):
             yield "event: done\ndata: ok\n\n"
             return
         chunks: list[str] = []
+        # Task router (Step 2): classified only after auth/RBAC/authorization
+        # above; audited before the local model is invoked.
+        from .ai.task_router import classify, model_for
+        cat = classify(b.messages[-1].content, explicit=b.task_type,
+                       has_docs=bool(b.document_ids) or b.mode == "my_docs")
+        selected = model_for(cat)
+        audit_log.append(user["id"], user["role"], "model_route",
+                         resource=convo["id"],
+                         detail=f"task_type={cat} model={selected}")
+        # Friendly task-routing indicator frame (category only — never a
+        # prompt, model internals, or chain-of-thought).
+        yield f"event: task\ndata: {cat}\n\n"
         try:
             for delta in svc.chat_stream(user, msgs, tools=b.tools, lang=lang,
-                                         extra_context=extra_ctx):
+                                         extra_context=extra_ctx, task_type=cat):
                 chunks.append(delta)
                 if lang == "en":
                     yield f"data: {delta}\n\n"
@@ -344,9 +389,12 @@ def chat_stream(b: ChatIn, user: dict = Depends(require_perm("AI_CHAT"))):
                              resource=convo["id"], decision="deny", detail=str(e.detail)[:200])
             return
         except (AIError, ProviderUnavailable) as e:
-            yield f"event: error\ndata: 502 {e}\n\n"
+            # Honest failure: no silent fallback to another model, no fake text.
+            yield "event: error\ndata: 502 AI provider unavailable: Selected local model is unavailable.\n\n"
             audit_log.append(user["id"], user["role"], "ai_provider_error",
-                             resource=convo["id"], decision="deny", detail=str(e)[:200])
+                             resource=convo["id"], decision="deny",
+                             detail=f"task_type={cat} model={selected} "
+                                    f"error={str(e)[:160]}")
             return
         en_full = _with_sources("".join(chunks), sources)
         full, translated = translate_answer(en_full, lang, tr)
@@ -357,11 +405,17 @@ def chat_stream(b: ChatIn, user: dict = Depends(require_perm("AI_CHAT"))):
             yield f"data: {full[len(''.join(chunks)):]}\n\n"
         prov = svc.provider
         tools_used = (b.tools or []) + (["rag"] if sources else [])
+        # Honest model attribution: the model that ACTUALLY produced this stream
+        # (providers record it on success); the mock honestly reports itself.
+        actual_model = (getattr(prov, "last_invoked_model", None)
+                        or getattr(prov, "model", prov.name))
         store.add_message(convo["id"], "assistant", full, provider=prov.name,
-                          model=getattr(prov, "model", prov.name), tools_used=tools_used,
+                          model=actual_model, tools_used=tools_used,
                           lang=lang)
         audit_log.append(user["id"], user["role"], "ai_chat", resource=convo["id"],
-                         detail=f"provider={prov.name} stream out_chars={len(full)} "
+                         detail=f"provider={prov.name} model={actual_model} "
+                                f"task_type={cat} selected_model={selected} "
+                                f"stream out_chars={len(full)} "
                                 f"lang={lang} translated={translated}")
         if sources:
             audit_log.append(user["id"], user["role"], "doc_question", resource=convo["id"],
@@ -403,10 +457,17 @@ def status(user: dict = Depends(get_current_user)):
     from .i18n import get_translation_provider
     emb, vs = get_embedding_provider(), get_vector_store()
     tr = get_translation_provider()
+    from .ai.task_router import model_for
     return {"provider": info.get("provider"), "model": info.get("model", ""),
             "reachable": info.get("reachable", False), "detail": info.get("detail", ""),
             "role": user["role"], "prompt_id": user["role"],
             "backend": store.backend(),
+            "routing": {"general": model_for("GENERAL"),
+                        "document": model_for("DOCUMENT"),
+                        "coding": model_for("CODING"),
+                        # "" = vision model not configured (honest state;
+                        # the UI shows an honest capability sentence).
+                        "vision": model_for("VISION")},
             "rag": {"embed_provider": emb.name, "embed_dim": emb.dim,
                     "vector_backend": vs.health().get("backend")},
             "i18n": {"translate_provider": tr.name,

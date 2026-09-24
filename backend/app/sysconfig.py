@@ -19,12 +19,17 @@ from . import config as cfg
 PATH = os.getenv("SOV_SYSCONFIG_PATH", "") or cfg.data_path("sysconfig.json")
 
 AGENT_NAMES = ["document_analysis", "report_generation", "review",
-               "data_analysis", "admin_assistant"]
+               "data_analysis", "admin_assistant", "coding_agent"]
 
 CONFIG_SCHEMA: dict[str, dict] = {
     "SOV_AI_PROVIDER": {"type": "enum", "choices": ["auto", "mock", "mock-fail", "ollama"],
                         "desc": "Active AI provider"},
     "OLLAMA_MODEL": {"type": "model", "desc": "LLM model selection"},
+    "SOV_MODEL_GENERAL": {"type": "model",
+                          "desc": "Model for GENERAL/DOCUMENT routed tasks"},
+    "SOV_MODEL_CODING": {"type": "model", "desc": "Model for CODING routed tasks"},
+    "SOV_MODEL_VISION": {"type": "model",
+                         "desc": "Model for VISION capability (optional; unset = not configured)"},
     "OLLAMA_BASE_URL": {"type": "url", "desc": "Local model daemon URL"},
     "SOV_EMBED_PROVIDER": {"type": "enum", "choices": ["mock", "hash", "ollama", "fail"],
                            "desc": "Embedding provider"},

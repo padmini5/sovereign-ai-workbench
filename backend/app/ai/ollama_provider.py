@@ -55,6 +55,9 @@ class OllamaProvider(ModelProvider):
         # an empty result is cached briefly so a later model pull is picked up.
         self._discovered: str | None = None
         self._discovered_at = 0.0
+        # Set only after a successful completion: which model ACTUALLY answered
+        # (never a routing target). Read by AIService to report the real model.
+        self.last_invoked_model: str = ""
 
     def _resolve_model(self) -> str:
         """Configured model always wins (env precedence). Otherwise discover an
@@ -76,20 +79,29 @@ class OllamaProvider(ModelProvider):
             self.model = pick  # sticky for this instance (env was empty)
         return pick
 
-    def _chat_payload(self, messages: list[dict], system: str, stream: bool, **opts) -> dict:
+    def _chat_payload(self, messages: list[dict], system: str, stream: bool,
+                      model: str = "", **opts) -> dict:
         msgs = ([{"role": "system", "content": system}] if system else []) + [
             {"role": m["role"], "content": m["content"]} for m in messages
             if m.get("role") in ("user", "assistant")]
-        p: dict = {"model": self.model, "messages": msgs, "stream": stream}
+        # Per-call model override (server-side task routing) wins over the
+        # configured/discovered default — this is how the selected local model
+        # is ACTUALLY invoked; the routing decision alone changes nothing.
+        p: dict = {"model": model or self.model, "messages": msgs, "stream": stream}
         if opts.get("max_tokens"):
             p["options"] = {"num_predict": int(opts["max_tokens"])}
         return p
 
     def generate(self, messages: list[dict], system: str = "", **opts) -> str:
-        if not self._resolve_model():
-            raise ProviderUnavailable("no model configured (set OLLAMA_MODEL)")
+        override = str(opts.pop("model", None) or "").strip()
+        model = override
+        if not model:
+            if not self._resolve_model():
+                raise ProviderUnavailable("no model configured (set OLLAMA_MODEL)")
+            model = self.model
         try:
-            out = _post("/api/chat", self._chat_payload(messages, system, False, **opts),
+            out = _post("/api/chat",
+                        self._chat_payload(messages, system, False, model=model, **opts),
                         timeout=float(opts.get("timeout", 90)))
         except ProviderUnavailable:
             raise
@@ -99,9 +111,10 @@ class OllamaProvider(ModelProvider):
                 f"{m['role']}: {m['content']}" for m in messages)
             try:
                 out = _post("/api/generate",
-                            {"model": self.model, "prompt": prompt, "stream": False},
+                            {"model": model, "prompt": prompt, "stream": False},
                             timeout=float(opts.get("timeout", 90)))
                 if out.get("response"):
+                    self.last_invoked_model = model
                     return out["response"]
             except ProviderUnavailable:
                 raise
@@ -109,21 +122,28 @@ class OllamaProvider(ModelProvider):
         msg = (out.get("message") or {}).get("content") or out.get("response")
         if not msg:
             if "error" in out and "model" in str(out["error"]).lower():
-                raise ProviderUnavailable(f"model '{self.model}' not installed: {out['error']}")
+                raise ProviderUnavailable(f"model '{model}' not installed: {out['error']}")
             raise ProviderUnavailable(f"empty ollama response: {str(out)[:200]}")
+        self.last_invoked_model = model
         return msg
 
     def generate_stream(self, messages: list[dict], system: str = "", **opts) -> Iterator[str]:
-        if not self._resolve_model():
-            raise ProviderUnavailable("no model configured (set OLLAMA_MODEL)")
+        override = str(opts.pop("model", None) or "").strip()
+        model = override
+        if not model:
+            if not self._resolve_model():
+                raise ProviderUnavailable("no model configured (set OLLAMA_MODEL)")
+            model = self.model
         req = urllib.request.Request(
             self.base_url + "/api/chat",
-            data=json.dumps(self._chat_payload(messages, system, True, **opts)).encode(),
+            data=json.dumps(self._chat_payload(messages, system, True,
+                                               model=model, **opts)).encode(),
             headers={"Content-Type": "application/json"}, method="POST")
         try:
             resp = urllib.request.urlopen(req, timeout=float(opts.get("timeout", 120)))
         except Exception as e:
             raise ProviderUnavailable(f"ollama unreachable at {self.base_url}: {e}") from e
+        self.last_invoked_model = model  # daemon accepted the model for this stream
         with resp:
             for raw in resp:
                 try:

@@ -408,6 +408,17 @@ const en = {
   demoBadge: 'DEMO',
   demoDataNote: 'Demo data — seeded for demonstration only.',
   auditLog: 'Audit log',
+  /* Step 4: dashboard workspace + system capabilities */
+  systemCaps: 'System & Capabilities',
+  dashAttendance: 'Today\'s Attendance',
+  dashWork: 'Current Work',
+  dashProgress: 'Progress & Performance',
+  dashActivity: 'Recent Activity',
+  dashFeatures: 'Workspace tools',
+  cardCoding: 'Coding Agent',
+  cardInspect: 'Inspection & Approval',
+  noActivity: 'No recent activity yet.',
+  dashNotMarked: 'Not marked yet.',
 };
 
 const EXTRA = {

@@ -17,6 +17,7 @@ DEFAULTS = {
     "login": 60, "chat": 120, "upload": 60, "analyze": 120,
     "agent_run": 60, "voice": 120, "admin_config": 60,
     "work": 120, "analytics": 120, "reports": 60, "device": 120,
+    "approvals": 60,
 }
 
 

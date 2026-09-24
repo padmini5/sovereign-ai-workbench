@@ -46,6 +46,13 @@ services:
       SOV_DATA_DIR: /data
       DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
       SOV_OLLAMA_URL: ${SOV_OLLAMA_URL:-http://ollama:11434}
+      # Task routing (Step 2): general/document model via the existing
+      # OLLAMA_MODEL convention; coding tasks get their own LOCAL model.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      SOV_MODEL_CODING: ${SOV_MODEL_CODING:-qwen2.5-coder:1.5b}
+      # Optional vision capability: empty default = the UI honestly reports
+      # "Available when local vision model is configured." (no download).
+      SOV_MODEL_VISION: ${SOV_MODEL_VISION:-}
       SOV_CORS_ORIGINS: ${SOV_CORS_ORIGINS:-http://localhost:8080}
       SOV_DEMO_LOGIN: ${SOV_DEMO_LOGIN:-1}
     volumes:
@@ -83,7 +90,9 @@ services:
 
   # Optional on-prem LLM. NOT started by default and NEVER pulled at build
   # time. Start with:  docker compose --profile local-ai up -d
-  # Then pull models explicitly:  docker compose exec ollama ollama pull qwen2.5:7b-instruct
+  # Then pull the routed models explicitly:
+  #   docker compose exec ollama ollama pull llama3.2:3b
+  #   docker compose exec ollama ollama pull qwen2.5-coder:1.5b
   ollama:
     image: ollama/ollama:latest
     profiles: [local-ai]

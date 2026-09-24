@@ -14,6 +14,12 @@ WORKDIR /app
 COPY requirements.txt roles.yaml ./
 COPY backend ./backend
 
+# tesseract: local on-prem OCR engine for the scanned-document workflow
+# (paired with pytesseract from requirements.txt). No cloud OCR, ever.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
 # psycopg is intentionally NOT in requirements.txt (SQLite default); the
 # container enables the optional PostgreSQL path, so it is added here only.
 RUN pip install --no-cache-dir -r requirements.txt "psycopg[binary]" \

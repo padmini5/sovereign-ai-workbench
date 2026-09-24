@@ -5,10 +5,14 @@ import { aiStatus, friendlyError } from './status.js';
 import { captureVoiceWav } from './voice-capture.js';
 
 /* Phase 2 chat console (+ Step 19 languages): history, streaming, retry,
-   clear, language selector, model/status indicator. Talks ONLY to
+   clear, language selector, status indicator. Talks ONLY to
    /api/v1/ai (permission-enforced). */
 
 /* 12 Step-19 languages imported from ui-strings.js */
+
+/* Friendly task-routing labels (Step 4): category words only — never
+   model names, prompts, or internals. */
+const TASK_LABEL = { GENERAL: 'General', DOCUMENT: 'Document', CODING: 'Coding', VISION: 'Image' };
 
 export function StatusPill({ tok }) {
   const [st, setSt] = useState(null);
@@ -114,7 +118,8 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
   const [msgs, setMsgs] = useState([]); // {role, content, tools?}
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [streaming, setStreaming] = useState(true);
+  const [streaming] = useState(true);
+  const [routeTask, setRouteTask] = useState('');
   const [err, setErr] = useState('');
   const [lang, setLang] = useState(uiLang || 'en'); // per-request; header pref is default
   const L = (k) => t(uiLang || 'en', k);
@@ -205,6 +210,7 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
         const ev = (/^event: (\w+)/m.exec(frame) || [])[1] || 'data';
         const dt = (/^data: ([\s\S]*)$/m.exec(frame) || [])[1] ?? '';
         if (ev === 'meta') cid = dt.trim();
+        else if (ev === 'task') setRouteTask(dt.trim());
         else if (ev === 'error') failed = dt;
         else if (ev === 'done') { /* end */ }
         else acc += dt;
@@ -219,6 +225,7 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
   const sendOnce = async (text) => {
     const j = await apiFetch('/api/v1/ai/chat', tok, { method: 'POST', body: JSON.stringify(payload(text)) });
     setConvoId(j.conversation_id);
+    if (j.task_type) setRouteTask(j.task_type);
     // Backend appends a plain-text "Sources:" section; when structured
     // sources exist we strip it and render them as cards instead.
     const raw = j.message.content;
@@ -231,7 +238,7 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
   const send = async (retryText) => {
     const text = (retryText ?? input).trim();
     if (!text || busy) return;
-    setBusy(true); setErr(''); setLastUser(text); setInput('');
+    setBusy(true); setErr(''); setLastUser(text); setInput(''); setRouteTask('');
     try { streaming ? await sendStream(text) : await sendOnce(text); }
     catch (e) {
       setErr(e.status === 403
@@ -299,20 +306,12 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
   const sizeFmt = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB'
     : Math.max(1, Math.round((b || 0) / 1024)) + ' KB');
 
-  const QUICK = [
+  const SUGGESTIONS = [
     ['Summarize my file', 'Summarize this document'],
     ['Analyze this data', 'Analyze this data: totals, averages, trends, and missing values'],
     ['Find important information', 'Find the important information'],
-    ['Compare selected files', 'Compare these files'],
-    ['Show key trends', 'Show the key trends'],
-    ['Generate a report', 'Create a short report'],
-  ];
-
-  const QUICK_WORK = [
     ['Ask about my work', 'What should I complete today?'],
-    ['Ask about a procedure', 'Explain this procedure.'],
     ['Pending work', 'What is my pending work?'],
-    ['Relevant documents', 'What documents are relevant to my work?'],
   ];
 
   return (
@@ -325,14 +324,17 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
             <StatusPill tok={tok} />
             <span style={s.mut}>Private AI · Secure Local Processing</span>
           </div>
+          {TASK_LABEL[routeTask] && (
+            <div style={{ ...s.mut, marginTop: 4 }}>
+              Task type: {TASK_LABEL[routeTask]} · Selected local AI capability: {TASK_LABEL[routeTask]}
+            </div>
+          )}
         </div>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <label style={s.mut}>{L('language')}{' '}
             <select value={lang} onChange={(e) => setLang(e.target.value)} style={s.sel}>
               {LANGS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}
             </select></label>
-          <label style={s.mut}><input type="checkbox" checked={streaming}
-            onChange={(e) => setStreaming(e.target.checked)} /> stream</label>
           <button style={s.mini} onClick={clear}>{L('clear')}</button>
         </span>
       </div>
@@ -449,7 +451,6 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
             {m.role === 'assistant' && m.sources && m.sources.length === 0 && m.tools?.includes('rag') && (
               <div style={{ ...s.mut, marginTop: 4 }}>No matching chunks in your scope — nothing was invented.</div>
             )}
-            {m.tools?.length > 0 && <div style={s.mut}>tools: {m.tools.join(', ')}</div>}
           </div>
         ))}
         {busy && msgs[msgs.length - 1]?.role === 'user' && <div style={s.a}><div style={s.who}>Assistant</div>…</div>}
@@ -458,12 +459,7 @@ export function ChatView({ tok, user, askDoc, askCtx, uiLang }) {
       {err && <p style={s.err}>{err}{' '}
         {lastUser && <button style={s.mini} onClick={() => send(lastUser)} disabled={busy}>{L('retry')}</button>}</p>}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-        {QUICK.map(([label, q]) => (
-          <button key={label} style={s.mini} disabled={busy} onClick={() => quickAsk(q)}>{label}</button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-        {QUICK_WORK.map(([label, q]) => (
+        {SUGGESTIONS.map(([label, q]) => (
           <button key={label} style={s.mini} disabled={busy} onClick={() => quickAsk(q)}>{label}</button>
         ))}
       </div>

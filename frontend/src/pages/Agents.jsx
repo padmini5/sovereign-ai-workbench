@@ -4,8 +4,9 @@ import { T } from '../i18n.js';
 import { AgentsView } from '../agents.jsx';
 import { Card, Skeleton, ErrorNote, Empty, StateBadge } from '../ui.jsx';
 
-/* Agents page: registry (5 allow-listed agents, role-gated server-side)
-   + the runs console (goal, steps, status, confirm/cancel, errors). */
+/* Agents page: registry (allow-listed agents, role-gated server-side)
+   + the runs console (goal, steps, status, confirm/cancel, errors)
+   + the approval-notes panel (status, download, human decisions). */
 
 function RegistryCard({ a }) {
   return (

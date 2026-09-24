@@ -21,6 +21,7 @@ from .base import AIError, ModelProvider
 from .mock_provider import MockProvider
 from .ollama_provider import OllamaProvider
 from .prompts import system_prompt_for
+from .task_router import model_for, normalize_category
 from .tools import run_tool
 
 
@@ -28,10 +29,27 @@ class AIService:
     def __init__(self, provider: ModelProvider):
         self.provider = provider
 
+    def generate(self, messages: list[dict], system: str = "",
+                 task_type: str = "", **opts) -> str:
+        """Single completion for internal (agent) callers with optional
+        server-side task routing. task_type comes ONLY from the server-side
+        agent registry or deterministic classify() — never from client input;
+        the selected model is passed to the provider as a call option (the
+        provider has no routing knowledge of its own)."""
+        if task_type:
+            opts["model"] = model_for(normalize_category(task_type))
+        return self.provider.generate(messages, system=system, **opts)
+
     def chat(self, user: dict, messages: list[dict],
              tools: list[str] | None = None, lang: str = "en",
-             extra_context: str = "", **opts) -> dict:
+             extra_context: str = "", task_type: str = "",
+             **opts) -> dict:
         t0 = time.time()
+        cat, route_model = "", ""
+        if task_type:
+            cat = normalize_category(task_type)
+            route_model = model_for(cat)
+            opts["model"] = route_model
         prompt_id, system = system_prompt_for(user["role"])
         if lang and lang != "en":
             system += f" Reply in language '{lang}'. Technical IDs stay in English."
@@ -48,14 +66,26 @@ class AIService:
         text = self.provider.generate(
             messages, system=system, role=user["role"],
             tools_used=tools_used, tool_context=tool_context.strip(), **opts)
+        # Actual answerer: providers record which model really ran. The mock
+        # records nothing and honestly reports itself ("mock") — a routing
+        # target is never claimed as the answerer when it did not answer.
+        invoked = getattr(self.provider, "last_invoked_model", None) if route_model else None
+        actual = invoked or getattr(self.provider, "model", self.provider.name)
         return {"text": text, "provider": self.provider.name,
-                "model": getattr(self.provider, "model", self.provider.name),
+                "model": actual, "task_type": cat,
+                "selected_model": route_model or actual,
                 "prompt_id": prompt_id, "tools_used": tools_used,
                 "elapsed_s": round(time.time() - t0, 3)}
 
     def chat_stream(self, user: dict, messages: list[dict],
                     tools: list[str] | None = None, lang: str = "en",
-                    extra_context: str = "", **opts):
+                    extra_context: str = "", task_type: str = "",
+                    **opts):
+        cat, route_model = "", ""
+        if task_type:
+            cat = normalize_category(task_type)
+            route_model = model_for(cat)
+            opts["model"] = route_model
         prompt_id, system = system_prompt_for(user["role"])
         if lang and lang != "en":
             system += f" Reply in language '{lang}'. Technical IDs stay in English."
